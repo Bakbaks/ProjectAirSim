@@ -83,6 +83,15 @@ set(JSBSIM_SRC_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim/src/jsbsim-repo)
 set(JSBSIM_SHARED_LIB_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/bin)
 set(JSBSIM_STATIC_LIB_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/lib)
 set(JSBSIM_INCLUDE_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/include/JSBSim ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/include/JSBSim/math)
+
+# On Linux, build JSBSim as static library; on Windows, build as shared library
+if(UNIX)
+    set(JSBSIM_BUILD_SHARED_LIBS OFF)
+    set(JSBSIM_BYPRODUCTS ${JSBSIM_STATIC_LIB_DIR}/libjsbsim.a)
+else()
+    set(JSBSIM_BUILD_SHARED_LIBS ON)
+    set(JSBSIM_BYPRODUCTS ${JSBSIM_SHARED_LIB_DIR}/JSBSim.dll ${JSBSIM_STATIC_LIB_DIR}/JSBSim.lib)
+endif()
 ExternalProject_Add(jsbsim-repo
     GIT_REPOSITORY  https://github.com/JSBSim-Team/jsbsim
     GIT_TAG         "v1.1.12"
@@ -97,18 +106,15 @@ ExternalProject_Add(jsbsim-repo
         -DCMAKE_POSITION_INDEPENDENT_CODE=True
         -DCMAKE_BUILD_TYPE:STRING=${JSBSIM_BUILD_TYPE}
         -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_BINARY_DIR}/_deps/jsbsim-install
-        -DBUILD_SHARED_LIBS=ON
+        -DBUILD_SHARED_LIBS=${JSBSIM_BUILD_SHARED_LIBS}
         -DBUILD_PYTHON_MODULE=OFF
         -DBUILD_DOCS=OFF
     TEST_COMMAND    ""  # disable test step
-    BUILD_BYPRODUCTS ${JSBSIM_SHARED_LIB_DIR}/JSBSim.dll ${JSBSIM_STATIC_LIB_DIR}/JSBSim.lib 
+    BUILD_BYPRODUCTS ${JSBSIM_BYPRODUCTS} 
     BUILD_ALWAYS 1
 )
 ExternalProject_Add_Step(jsbsim-repo post-install
     COMMAND ${CMAKE_COMMAND} -E echo "Copying [jsbsim] library to ${JSBSIM_CORESIM_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_SHARED_LIB_DIR}/JSBSim.dll" "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/JSBSim.dll"
-    COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_STATIC_LIB_DIR}/JSBSim.lib" "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/JSBSim.lib"
-    #COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_LIB_DIR}/JSBSim.pdb" "${JSBSIM_PHYSICS_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/JSBSim.pdb"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_INCLUDE_DIR}" "${JSBSIM_CORESIM_DIR}/include"
     # Copy JSBSim models
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/aircraft" "${JSBSIM_CORESIM_DIR}/models/aircraft"
@@ -118,17 +124,32 @@ ExternalProject_Add_Step(jsbsim-repo post-install
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/scripts" "${JSBSIM_CORESIM_DIR}/models/scripts"
     DEPENDEES install
 )
-# add jsbsim shared library
-add_library(jsbsim SHARED IMPORTED)
+# Platform-specific post-install commands for JSBSim library files
 if(WIN32)
+    ExternalProject_Add_Step(jsbsim-repo post-install-libs
+        COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_SHARED_LIB_DIR}/JSBSim.dll" "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/JSBSim.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_STATIC_LIB_DIR}/JSBSim.lib" "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/JSBSim.lib"
+        #COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_LIB_DIR}/JSBSim.pdb" "${JSBSIM_PHYSICS_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/JSBSim.pdb"
+        DEPENDEES post-install
+    )
+else()
+    ExternalProject_Add_Step(jsbsim-repo post-install-libs
+        COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_STATIC_LIB_DIR}/libjsbsim.a" "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/libjsbsim.a"
+        DEPENDEES post-install
+    )
+endif()
+# add jsbsim library
+if(WIN32)
+    add_library(jsbsim SHARED IMPORTED)
     set_target_properties(jsbsim PROPERTIES
         IMPORTED_LOCATION ${JSBSIM_SHARED_LIB_DIR}/JSBSim.dll
         IMPORTED_IMPLIB ${JSBSIM_STATIC_LIB_DIR}/JSBSim.lib
     )
 else()
+    # On Linux, use static library (no IMPORTED_IMPLIB needed for static libraries)
+    add_library(jsbsim STATIC IMPORTED)
     set_target_properties(jsbsim PROPERTIES
-        IMPORTED_LOCATION ${JSBSIM_SHARED_LIB_DIR}/libjsbsim.so
-        IMPORTED_IMPLIB ${JSBSIM_STATIC_LIB_DIR}/libjsbsim.a
+        IMPORTED_LOCATION ${JSBSIM_STATIC_LIB_DIR}/libjsbsim.a
     )
 endif()
 
