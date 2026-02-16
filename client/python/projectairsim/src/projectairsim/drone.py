@@ -1449,6 +1449,64 @@ class Drone(object):
         taskcr = await self.client.request_async(req, callback)
         return taskcr
 
+    #set_brakes
+    def set_brakes(self, brakes_value: float) -> bool:
+        """Set brakes
+
+        Args:
+            brakes_value (float): Brakes value
+
+        Returns:
+            bool: True if brakes are set
+        """
+        set_brakes_req: Dict = {
+            "method": f"{self.parent_topic}/SetBrakes",
+            "params": {"_brakes_value": brakes_value},
+            "version": 1.0,
+        }
+        brakes_set = self.client.request(set_brakes_req)
+        return brakes_set
+
+    # get_jsbsim_property
+    def get_jsbsim_property(self, property_name: str) -> float:
+        """Get JSBSim property
+
+        Args:
+            property_name (str): Property name
+
+        Returns:
+            float: Property value
+        """
+        get_jsbsim_property_req: Dict = {
+            "method": f"{self.parent_topic}/GetJSBSimProperty",
+            "params": {"_property_name": property_name},
+            "version": 1.0,
+        }
+        property_value = self.client.request(get_jsbsim_property_req)
+        return property_value
+
+    # set_jsbsim_property
+    def set_jsbsim_property(self, property_name: str, property_value: float) -> bool:
+        """Set JSBSim property
+
+        Args:
+            property_name (str): Property name
+            property_value (float): Property value
+
+        Returns:
+            bool: True if property is set
+        """
+        set_jsbsim_property_req: Dict = {
+            "method": f"{self.parent_topic}/SetJSBSimProperty",
+            "params": {
+                "_property_name": property_name,
+                "_value": property_value,
+            },
+            "version": 1.0,
+        }
+        property_set = self.client.request(set_jsbsim_property_req)
+        return property_set
+
     def set_control_signals(self, control_signal_map: Dict) -> bool:
         """set_control_signals for Manual Controller type
 
