@@ -33,8 +33,8 @@ if (UNIX)
         link_directories("$ENV{UE_ROOT}/Engine/Source/ThirdParty/Unix/LibCxx/lib/Unix/x86_64-unknown-linux-gnu")
     else()
         message("Building/linking against system-installed toolchain")
-        set(CMAKE_C_COMPILER clang-13)
-        set(CMAKE_CXX_COMPILER clang++-13)
+        set(CMAKE_C_COMPILER clang-15)
+        set(CMAKE_CXX_COMPILER clang++-15)
     endif()
 endif()
 
@@ -70,6 +70,7 @@ set(SIMLIBS_TEST_DIR ${CMAKE_BINARY_DIR}/unit_tests)
 set(UE_PLUGIN_SIMLIBS_DIR ${CMAKE_SOURCE_DIR}/unreal/Blocks/Plugins/ProjectAirSim/SimLibs)
 set(UNITY_WRAPPER_DLL_DIR ${CMAKE_SOURCE_DIR}/unity/BlocksUnity/Assets/Plugins)
 set(MATLAB_PHYSICS_DIR ${CMAKE_SOURCE_DIR}/physics/matlab_sfunc)
+set(JSBSIM_CORESIM_DIR ${CMAKE_SOURCE_DIR}/core_sim/jsbsim)
 set(MATLAB_CONTROL_DIR ${CMAKE_SOURCE_DIR}/vehicle_apis/multirotor_api/matlab_sfunc)
 # set(UE_PLUGIN_CESIUM_NATIVE_DIR ${CMAKE_SOURCE_DIR}/unreal/Blocks/Plugins/ProjectAirSim/SimLibs)
 # set(UE_CESIUM_PLUGIN_DIR ${CMAKE_SOURCE_DIR}/unreal/Blocks/Plugins/CesiumForUnreal/)
@@ -96,6 +97,87 @@ elseif(UNIX)
     # set(CESIUM_LINKER_FLAGS "-stdlib=libc++ -lc++abi")
     # set(CESIUM_LINUX_TOOLCHAIN ${UE_CESIUM_PLUGIN_DIR}/extern/unreal-linux-toolchain.cmake)
 endif()
+
+# Set up dependency: jsbsim
+message("Setting up [jsbsim] dependency as an external project...")
+# CMake external projects don't adopt the parent's CMAKE_MSVC_RUNTIME_LIBRARY setting,
+# so to force /MD non-debug CRT to match UE, build Debug config as Relwithdebinfo and
+# build Release as Release.
+set(JSBSIM_BUILD_TYPE $<IF:$<CONFIG:Debug>,Relwithdebinfo,Release>)
+set(JSBSIM_SRC_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim/src/jsbsim-repo)
+set(JSBSIM_LIB_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/lib)
+set(JSBSIM_INCLUDE_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/include/JSBSim ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/include/JSBSim/math)
+
+# Platform-specific settings for JSBSim
+if(WIN32)
+    set(JSBSIM_C_COMPILER ${CMAKE_C_COMPILER})
+    set(JSBSIM_CXX_COMPILER ${CMAKE_CXX_COMPILER})
+    set(JSBSIM_CXX_FLAGS "")
+    set(JSBSIM_LIB_NAME JSBSim)
+    set(JSBSIM_SHARED_LIB ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/bin/JSBSim.dll)
+    set(JSBSIM_IMPORT_LIB ${JSBSIM_LIB_DIR}/JSBSim.lib)
+    set(JSBSIM_BYPRODUCTS ${JSBSIM_SHARED_LIB} ${JSBSIM_IMPORT_LIB})
+else()
+    set(JSBSIM_C_COMPILER clang)
+    set(JSBSIM_CXX_COMPILER clang++)
+    set(JSBSIM_CXX_FLAGS "-stdlib=libc++")
+    set(JSBSIM_LIB_NAME libJSBSim.so)
+    set(JSBSIM_SHARED_LIB ${JSBSIM_LIB_DIR}/libJSBSim.so)
+    set(JSBSIM_IMPORT_LIB "")
+    set(JSBSIM_BYPRODUCTS ${JSBSIM_SHARED_LIB})
+endif()
+
+ExternalProject_Add(jsbsim-repo
+    GIT_REPOSITORY  https://github.com/JSBSim-Team/jsbsim
+    GIT_TAG         "v1.1.12"
+    GIT_CONFIG      "advice.detachedHead=false"
+    PREFIX          ${CMAKE_BINARY_DIR}/_deps/jsbsim
+    BUILD_COMMAND   ${CMAKE_COMMAND} --build <BINARY_DIR> --config ${JSBSIM_BUILD_TYPE}
+    INSTALL_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --config ${JSBSIM_BUILD_TYPE} --target install
+    UPDATE_COMMAND  ""  # disable update step
+    CMAKE_ARGS
+        -DCMAKE_C_COMPILER=${JSBSIM_C_COMPILER}
+        -DCMAKE_CXX_COMPILER=${JSBSIM_CXX_COMPILER}
+        -DCMAKE_CXX_FLAGS=${JSBSIM_CXX_FLAGS}
+        -DCMAKE_POSITION_INDEPENDENT_CODE=True
+        -DCMAKE_BUILD_TYPE:STRING=${JSBSIM_BUILD_TYPE}
+        -DCMAKE_INSTALL_PREFIX:PATH=${CMAKE_BINARY_DIR}/_deps/jsbsim-install
+        -DBUILD_SHARED_LIBS=ON
+        -DBUILD_PYTHON_MODULE=OFF
+        -DBUILD_DOCS=OFF
+        # Disable SONAME versioning so libJSBSim.so doesn't require libJSBSim.so.1 symlink at runtime
+        -DCMAKE_PLATFORM_NO_VERSIONED_SONAME=TRUE
+        # Fix RPATH issue with Ninja generator
+        -DCMAKE_BUILD_WITH_INSTALL_RPATH=TRUE
+    TEST_COMMAND    ""  # disable test step
+    BUILD_BYPRODUCTS ${JSBSIM_BYPRODUCTS}
+    BUILD_ALWAYS 1
+)
+
+ExternalProject_Add_Step(jsbsim-repo post-install
+    COMMAND ${CMAKE_COMMAND} -E echo "Copying [jsbsim] library to ${JSBSIM_CORESIM_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_INCLUDE_DIR}" "${JSBSIM_CORESIM_DIR}/include"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/aircraft" "${JSBSIM_CORESIM_DIR}/models/aircraft"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/engine" "${JSBSIM_CORESIM_DIR}/models/engine"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/systems" "${JSBSIM_CORESIM_DIR}/models/systems"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/scripts" "${JSBSIM_CORESIM_DIR}/models/scripts"
+    COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_SHARED_LIB}" "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/${JSBSIM_LIB_NAME}"
+    DEPENDEES install
+)
+
+# Add jsbsim as imported library
+add_library(jsbsim SHARED IMPORTED)
+if(WIN32)
+    set_target_properties(jsbsim PROPERTIES
+        IMPORTED_LOCATION ${JSBSIM_SHARED_LIB}
+        IMPORTED_IMPLIB ${JSBSIM_IMPORT_LIB}
+    )
+else()
+    set_target_properties(jsbsim PROPERTIES
+        IMPORTED_LOCATION ${JSBSIM_SHARED_LIB}
+    )
+endif()
+
 
 
 # Set up dependency: nlohmann JSON
