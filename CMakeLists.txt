@@ -106,22 +106,21 @@ message("Setting up [jsbsim] dependency as an external project...")
 set(JSBSIM_BUILD_TYPE $<IF:$<CONFIG:Debug>,Relwithdebinfo,Release>)
 set(JSBSIM_SRC_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim/src/jsbsim-repo)
 set(JSBSIM_LIB_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/lib)
-set(JSBSIM_INCLUDE_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/include/JSBSim ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/include/JSBSim/math)
+set(JSBSIM_INCLUDE_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/include/JSBSim)
 
 # Platform-specific settings for JSBSim
 if(WIN32)
     set(JSBSIM_C_COMPILER ${CMAKE_C_COMPILER})
     set(JSBSIM_CXX_COMPILER ${CMAKE_CXX_COMPILER})
     set(JSBSIM_CXX_FLAGS "")
-    set(JSBSIM_LIB_NAME JSBSim)
-    set(JSBSIM_SHARED_LIB ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/bin/JSBSim.dll)
+    set(JSBSIM_BIN_DIR ${CMAKE_BINARY_DIR}/_deps/jsbsim-install/bin)
+    set(JSBSIM_SHARED_LIB ${JSBSIM_BIN_DIR}/JSBSim.dll)
     set(JSBSIM_IMPORT_LIB ${JSBSIM_LIB_DIR}/JSBSim.lib)
     set(JSBSIM_BYPRODUCTS ${JSBSIM_SHARED_LIB} ${JSBSIM_IMPORT_LIB})
 else()
     set(JSBSIM_C_COMPILER clang)
     set(JSBSIM_CXX_COMPILER clang++)
     set(JSBSIM_CXX_FLAGS "-stdlib=libc++")
-    set(JSBSIM_LIB_NAME libJSBSim.so)
     set(JSBSIM_SHARED_LIB ${JSBSIM_LIB_DIR}/libJSBSim.so)
     set(JSBSIM_IMPORT_LIB "")
     set(JSBSIM_BYPRODUCTS ${JSBSIM_SHARED_LIB})
@@ -154,14 +153,22 @@ ExternalProject_Add(jsbsim-repo
     BUILD_ALWAYS 1
 )
 
-ExternalProject_Add_Step(jsbsim-repo post-install
+set(JSBSIM_POST_INSTALL_COMMANDS
     COMMAND ${CMAKE_COMMAND} -E echo "Copying [jsbsim] library to ${JSBSIM_CORESIM_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_INCLUDE_DIR}" "${JSBSIM_CORESIM_DIR}/include"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/aircraft" "${JSBSIM_CORESIM_DIR}/models/aircraft"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/engine" "${JSBSIM_CORESIM_DIR}/models/engine"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/systems" "${JSBSIM_CORESIM_DIR}/models/systems"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${JSBSIM_SRC_DIR}/scripts" "${JSBSIM_CORESIM_DIR}/models/scripts"
-    COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_SHARED_LIB}" "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/${JSBSIM_LIB_NAME}"
+    COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_SHARED_LIB}" "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/"
+)
+if(WIN32)
+    list(APPEND JSBSIM_POST_INSTALL_COMMANDS COMMAND ${CMAKE_COMMAND} -E copy "${JSBSIM_IMPORT_LIB}" "${JSBSIM_CORESIM_DIR}/lib/$<IF:$<CONFIG:Release>,Release,Debug>/")
+endif()
+
+ExternalProject_Add_Step(jsbsim-repo post-install
+    ${JSBSIM_POST_INSTALL_COMMANDS}
     DEPENDEES install
 )
 
