@@ -12,7 +12,8 @@ public class ProjectAirSim : ModuleRules
     public ProjectAirSim(ReadOnlyTargetRules Target) : base(Target)
     {
 		bEnableUndefinedIdentifierWarnings = false;
-        CppStandard = CppStandardVersion.Cpp17;
+        bool bUseCpp20 = Target.Version.MajorVersion > 5 || (Target.Version.MajorVersion == 5 && Target.Version.MinorVersion >= 7);
+        CppStandard = bUseCpp20 ? CppStandardVersion.Cpp20 : CppStandardVersion.Cpp17;
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
         // Allow Unreal's default setting for IWYU instead of setting explicitly
