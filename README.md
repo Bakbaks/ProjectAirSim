@@ -162,6 +162,12 @@ See **[Transitioning from AirSim](docs/transition_from_airsim.md)** for guidance
 
 Please see the [License page](docs/license.md) for Project AirSim license information.
 
+## Third-Party Interoperability and Licensing
+
+Project AirSim may interoperate at runtime with third-party tools and data files, including JSBSim-compatible aircraft model definitions.
+
+Those third-party components and assets remain licensed under their respective open-source licenses by their original authors.
+
 ---
 
 Copyright (C) Microsoft Corporation.  

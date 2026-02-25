@@ -1,0 +1,31 @@
+{
+  "id": "SceneBasicFixedWing",
+  "actors": [
+    {
+      "type": "robot",
+      "name": "c310",
+      "origin": {
+        "xyz": "3 -2 -0.95",
+        "rpy": "0 0 0"
+      },
+      "robot-config": "robot_cessna310_rc.jsonc"
+    }
+  ],
+  "clock": {
+    "type": "steppable",
+    "step-ns": 3000000,
+    "real-time-update-rate": 3000000,
+    "pause-on-start": false
+  },
+  "home-geo-point": {
+    "latitude": 29.4296741,
+    "longitude": -95.16384722,
+    "altitude": 7.5 
+  },
+  "segmentation": {
+    "initialize-ids": true,
+    "ignore-existing": false,
+    "use-owner-name": true
+  },
+  "scene-type": "UnrealNative"
+}
