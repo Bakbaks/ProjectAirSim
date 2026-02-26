@@ -49,6 +49,8 @@ class Robot : public Actor {
   typedef std::function<void(const ActuatedTransforms&, TimeNano)>
       ActuatedTransformsCallback;
 
+    typedef std::function<double(double, double)> TerrainElevationCallback;
+
  public:
   Robot();
 
@@ -105,6 +107,11 @@ class Robot : public Actor {
 
   void SetCallbackActuatorOutputUpdated(
       const ActuatedTransformsCallback& callback);
+
+  void SetCallbackTerrainElevationUpdated(
+      const TerrainElevationCallback& callback);
+
+    TerrainElevationCallback GetTerrainElevationCallback();
 
   const Kinematics& GetKinematics() const;
   const Environment& GetEnvironment() const;

@@ -116,6 +116,11 @@ class Robot::Impl : public ActorImpl {
   void SetCallbackActuatorOutputUpdated(
       const ActuatedTransformsCallback& callback);
 
+    void SetCallbackTerrainElevationUpdated(
+      const TerrainElevationCallback& callback);
+
+    TerrainElevationCallback GetTerrainElevationCallback();
+
   void OnDesiredRobotPoseStampedMessage(const Topic& topic,
                                         const Message& message);
 
@@ -223,6 +228,8 @@ class Robot::Impl : public ActorImpl {
   KinematicsCallback callback_kinematics_updated_;
 
   ActuatedTransformsCallback callback_actuated_transforms_updated_;
+
+  TerrainElevationCallback callback_terrain_elevation_updated_;
 
   TransformTree::IndirectRefFrame
       indirectrefframe_;  // Current pose reference frame
@@ -362,6 +369,17 @@ void Robot::SetCallbackActuatorOutputUpdated(
     const ActuatedTransformsCallback& callback) {
   static_cast<Robot::Impl*>(pimpl_.get())
       ->SetCallbackActuatorOutputUpdated(callback);
+}
+
+void Robot::SetCallbackTerrainElevationUpdated(
+    const TerrainElevationCallback& callback) {
+  static_cast<Robot::Impl*>(pimpl_.get())
+      ->SetCallbackTerrainElevationUpdated(callback);
+}
+
+Robot::TerrainElevationCallback Robot::GetTerrainElevationCallback() {
+  return static_cast<Robot::Impl*>(pimpl_.get())
+      ->GetTerrainElevationCallback();
 }
 
 void Robot::EndUpdate() {
@@ -877,10 +895,22 @@ void Robot::Impl::SetCallbackActuatorOutputUpdated(
   callback_actuated_transforms_updated_ = callback;
 }
 
+void Robot::Impl::SetCallbackTerrainElevationUpdated(
+    const TerrainElevationCallback& callback) {
+  std::lock_guard<std::mutex> lock(update_lock_);
+  callback_terrain_elevation_updated_ = callback;
+}
+
+Robot::TerrainElevationCallback Robot::Impl::GetTerrainElevationCallback() {
+  std::lock_guard<std::mutex> lock(update_lock_);
+  return callback_terrain_elevation_updated_;
+}
+
 void Robot::Impl::OnEndUpdate() {
   // Clear all topic callbacks to nullptr
   callback_kinematics_updated_ = nullptr;
   callback_actuated_transforms_updated_ = nullptr;
+  callback_terrain_elevation_updated_ = nullptr;
 
   // Unregister all topics
   for (const auto& topic_ref : topics_) {

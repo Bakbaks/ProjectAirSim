@@ -2,9 +2,11 @@
 
 #include "jsbsim_physics.hpp"
 
+#include <cmath>
 #include <memory>
 #include <vector>
 
+#include "jsbsim_ground_callback.hpp"
 #include "core_sim/actuators/actuator.hpp"
 #include "core_sim/actuators/lift_drag_control_surface.hpp"
 #include "core_sim/actuators/rotor.hpp"
@@ -17,6 +19,7 @@
 #include "initialization/FGInitialCondition.h"
 #include "initialization/FGTrim.h"
 #include "FGFDMExec.h" // JSBSim
+#include "models/FGInertial.h"
 
 
 
@@ -47,17 +50,22 @@ void JSBSimPhysicsBody::InitializeJSBSimPhysicsBody(
   model_ = sim_robot_.GetJSBSimModel();
   model_->SetPropertyValue("simulation/dt", 0.008333333333); //TODO: use configuration instead of harcoded value
 
-  InitializeJSBSim();
-
   // get difference betweeen JSBSim's initial geopoint position and home geopoint position
   const auto& world_geopoint = sim_robot_.GetEnvironment().home_geo_point.geo_point;
-  home_geopoint_ = GetModelCoordinates();
+  const auto& model_geopoint = sim_robot_.GetEnvironment().env_info.geo_point;
+  home_geopoint_ =
+      Vector3(model_geopoint.latitude, model_geopoint.longitude,
+              model_geopoint.altitude);
   //Get distance between home geopoint and JSBSim's initial geopoint
   GeodeticConverter converter(world_geopoint.latitude, world_geopoint.longitude,
                               world_geopoint.altitude); 
   converter.geodetic2Ned(home_geopoint_[0], home_geopoint_[1], home_geopoint_[2], &home_geopoint_ned_[0], &home_geopoint_ned_[1], &home_geopoint_ned_[2]);
-  // unreal terrain is flat. Use initial altitude
-  home_geopoint_ned_[2] = -(home_geopoint_[2]-world_geopoint.altitude);
+}
+
+void JSBSimPhysicsBody::EnsureJSBSimInitialized() {
+  if (!jsbsim_initialized_) {
+    InitializeJSBSim();
+  }
 }
 
 void JSBSimPhysicsBody::InitializeJSBSim(){
@@ -65,13 +73,34 @@ void JSBSimPhysicsBody::InitializeJSBSim(){
   auto& init = *model_->GetIC();
   //SGPath init_file("reset00.xml");
   //init.Load(init_file);
-  init.SetLatitudeDegIC(sim_robot_.GetEnvironment().env_info.geo_point.latitude);
+  init.SetGeodLatitudeDegIC(sim_robot_.GetEnvironment().env_info.geo_point.latitude);
   init.SetLongitudeDegIC(sim_robot_.GetEnvironment().env_info.geo_point.longitude);
   auto alt_ft =
       sim_robot_.GetEnvironment().env_info.geo_point.altitude * MathUtils::meters_to_feets; // TODO: method to convert from m/s to fps
   init.SetAltitudeASLFtIC(alt_ft);
+
+  double terrain_elevation_asl_m =
+      sim_robot_.GetEnvironment().env_info.geo_point.altitude;
+  auto terrain_elevation_cb = sim_robot_.GetTerrainElevationCallback();
+  if (terrain_elevation_cb != nullptr) {
+    const auto& position = sim_robot_.GetKinematics().pose.position;
+    const auto terrain_cb_val = terrain_elevation_cb(position.x(), position.y());
+    if (std::isfinite(terrain_cb_val)) {
+      terrain_elevation_asl_m = terrain_cb_val;
+    }
+  }
+
   // Set terrain elevation at initial position
-  init.SetTerrainElevationFtIC(alt_ft); 
+  init.SetTerrainElevationFtIC(terrain_elevation_asl_m *
+                               MathUtils::meters_to_feets);
+
+  if (model_->GetInertial() != nullptr) {
+    const auto& home_geo_point =
+        sim_robot_.GetEnvironment().home_geo_point.geo_point;
+    model_->GetInertial()->SetGroundCallback(new JSBSimTerrainGroundCallback(
+        terrain_elevation_cb, home_geo_point));
+  }
+
   auto orientation = TransformUtils::ToRPY(sim_robot_.GetKinematics().pose.orientation);
   init.SetPsiDegIC(MathUtils::rad2Deg(orientation.z()));
   init.SetThetaDegIC(MathUtils::rad2Deg(orientation.y()));
@@ -93,6 +122,8 @@ void JSBSimPhysicsBody::InitializeJSBSim(){
     throw std::runtime_error("JSBSim failed to initialize");
   }
 
+  jsbsim_initialized_ = true;
+
   /*JSBSim::FGTrim trim_(model_.get(), JSBSim::tGround);
   if (!trim_.DoTrim()) 
 	{
@@ -108,7 +139,7 @@ void JSBSimPhysicsBody::SetJSBSimAltitudeGrounded(float delta_altitude){
   auto terrain_elevation_val = model_->GetPropertyValue("position/terrain-elevation-asl-ft") + delta_altitude * MathUtils::meters_to_feets;
   model_->SetPropertyValue("position/terrain-elevation-asl-ft", terrain_elevation_val);
   auto altitude = model_->GetPropertyValue("position/h-sl-meters");
-  auto new_altitude = altitude + delta_altitude * MathUtils::meters_to_feets;
+  auto new_altitude = altitude + delta_altitude;
   model_->SetPropertyValue("position/h-sl-meters", new_altitude);
 }
 
@@ -194,6 +225,7 @@ void JSBSimPhysicsModel::StepPhysicsBody(TimeNano dt_nanos,
     
     // Step 1 - Update physics body's data from robot's latest data
     fp_body->ReadRobotData();
+    fp_body->EnsureJSBSimInitialized();
     
 
 
