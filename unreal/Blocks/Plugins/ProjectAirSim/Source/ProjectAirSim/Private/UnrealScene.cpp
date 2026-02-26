@@ -388,8 +388,15 @@ void AUnrealScene::BeginPlay() {
                   world_api->GetZAtPoint(static_cast<float>(x_ned_m),
                                          static_cast<float>(y_ned_m));
 
-              return static_cast<double>(home_geo_point.geo_point.altitude) +
-                     static_cast<double>(terrain_rel_m);
+              if (!std::isfinite(terrain_rel_m)) {
+                return std::numeric_limits<double>::quiet_NaN();
+              }
+
+              const double terrain_asl_m =
+                  static_cast<double>(home_geo_point.geo_point.altitude) -
+                  static_cast<double>(terrain_rel_m);
+
+              return terrain_asl_m;
             });
       }
     }

@@ -1,4 +1,4 @@
-// Copyright (C) Microsoft Corporation. 
+// Copyright (C) Microsoft Corporation.
 // Copyright (C) 2025 IAMAI CONSULTING CORP
 
 // MIT License. All rights reserved.
@@ -65,8 +65,7 @@ class Robot::Impl : public ActorImpl {
  public:
   Impl(const std::string& id, const Transform& origin, const Logger& logger,
        const TopicManager& topic_manager, const std::string& parent_topic_path,
-       const ServiceManager& service_manager,
-       const StateManager& state_manager,
+       const ServiceManager& service_manager, const StateManager& state_manager,
        const std::string& working_simulation_path);
 
   void Load(ConfigJson config_json);
@@ -116,10 +115,10 @@ class Robot::Impl : public ActorImpl {
   void SetCallbackActuatorOutputUpdated(
       const ActuatedTransformsCallback& callback);
 
-    void SetCallbackTerrainElevationUpdated(
+  void SetCallbackTerrainElevationUpdated(
       const TerrainElevationCallback& callback);
 
-    TerrainElevationCallback GetTerrainElevationCallback();
+  TerrainElevationCallback GetTerrainElevationCallback();
 
   void OnDesiredRobotPoseStampedMessage(const Topic& topic,
                                         const Message& message);
@@ -143,7 +142,7 @@ class Robot::Impl : public ActorImpl {
 
   const PhysicsType& GetPhysicsType() const;
   void SetPhysicsType(const PhysicsType& phys_type);
-  //used only by JSBSim physics and controller
+  // used only by JSBSim physics and controller
   std::shared_ptr<JSBSim::FGFDMExec> GetJSBSimModel() const;
   const std::string& GetPhysicsConnectionSettings() const;
   void SetPhysicsConnectionSettings(const std::string& phys_conn_settings);
@@ -250,9 +249,9 @@ Robot::Robot(const std::string& id, const Transform& origin,
              const ServiceManager& service_manager,
              const StateManager& state_manager,
              const std::string& working_simulation_path)
-    : Actor(std::shared_ptr<ActorImpl>(
-          new Robot::Impl(id, origin, logger, topic_manager, parent_topic_path,
-                          service_manager, state_manager, working_simulation_path))) {}
+    : Actor(std::shared_ptr<ActorImpl>(new Robot::Impl(
+          id, origin, logger, topic_manager, parent_topic_path, service_manager,
+          state_manager, working_simulation_path))) {}
 
 Robot::Robot(const std::string& id, const Transform& origin,
              const Logger& logger, const TopicManager& topic_manager,
@@ -260,9 +259,9 @@ Robot::Robot(const std::string& id, const Transform& origin,
              const ServiceManager& service_manager,
              const StateManager& state_manager, HomeGeoPoint home_geo_point,
              const std::string& working_simulation_path)
-    : Actor(std::shared_ptr<ActorImpl>(
-          new Robot::Impl(id, origin, logger, topic_manager, parent_topic_path,
-                          service_manager, state_manager, working_simulation_path))) {
+    : Actor(std::shared_ptr<ActorImpl>(new Robot::Impl(
+          id, origin, logger, topic_manager, parent_topic_path, service_manager,
+          state_manager, working_simulation_path))) {
   static_cast<Robot::Impl*>(pimpl_.get())->SetHomeGeoPoint(home_geo_point);
 }
 
@@ -378,8 +377,7 @@ void Robot::SetCallbackTerrainElevationUpdated(
 }
 
 Robot::TerrainElevationCallback Robot::GetTerrainElevationCallback() {
-  return static_cast<Robot::Impl*>(pimpl_.get())
-      ->GetTerrainElevationCallback();
+  return static_cast<Robot::Impl*>(pimpl_.get())->GetTerrainElevationCallback();
 }
 
 void Robot::EndUpdate() {
@@ -557,7 +555,7 @@ void Robot::Impl::Load(ConfigJson config_json) {
   InitializeSensors(GetKinematics(), GetEnvironment());
 
   // check if using jsbsim physics to initialize jsbsim
-  if(physics_type_ == PhysicsType::kJSBSimPhysics) {
+  if (physics_type_ == PhysicsType::kJSBSimPhysics) {
     InitializeJSBSimModel();
   }
 
@@ -767,15 +765,15 @@ void Robot::Impl::RegisterServiceMethods() {
   service_manager_.RegisterMethod(get_camera_ray, get_camera_ray_handler);
 }
 
-void Robot::Impl::InitializeJSBSimModel(){
+void Robot::Impl::InitializeJSBSimModel() {
   model_ = std::make_shared<JSBSim::FGFDMExec>();
   std::string jsbsim_root_path =
-        working_simulation_path_ + "/SimLibs/core_sim/jsbsim/models/";
+      working_simulation_path_ + "/SimLibs/core_sim/jsbsim/models/";
   model_->SetRootDir(SGPath(jsbsim_root_path));
   model_->SetAircraftPath(SGPath("aircraft"));
   model_->SetEnginePath(SGPath("engine"));
   model_->SetSystemsPath(SGPath("systems"));
-  if(jsbsim_script_!="") {
+  if (jsbsim_script_ != "") {
     if (!model_->LoadScript(SGPath(jsbsim_script_))) {
       throw std::runtime_error("Failed to load JSBSim script");
     }
@@ -910,7 +908,6 @@ void Robot::Impl::OnEndUpdate() {
   // Clear all topic callbacks to nullptr
   callback_kinematics_updated_ = nullptr;
   callback_actuated_transforms_updated_ = nullptr;
-  callback_terrain_elevation_updated_ = nullptr;
 
   // Unregister all topics
   for (const auto& topic_ref : topics_) {
@@ -1038,9 +1035,13 @@ void Robot::Impl::SetPhysicsType(const PhysicsType& phys_type) {
   physics_type_ = phys_type;
 }
 
-const std::string& Robot::Impl::GetJSBSimScript() const { return jsbsim_script_; }
+const std::string& Robot::Impl::GetJSBSimScript() const {
+  return jsbsim_script_;
+}
 
-std::shared_ptr<JSBSim::FGFDMExec> Robot::Impl::GetJSBSimModel() const { return model_; }
+std::shared_ptr<JSBSim::FGFDMExec> Robot::Impl::GetJSBSimModel() const {
+  return model_;
+}
 
 const std::string& Robot::Impl::GetPhysicsConnectionSettings() const {
   return physics_connection_settings_;
@@ -1486,12 +1487,10 @@ void Robot::Loader::LoadPhysicsType(const json& json) {
   } else if (physics_type == Constant::Config::jsbsim_physics) {
     impl_.physics_type_ = PhysicsType::kJSBSimPhysics;
     impl_.jsbsim_script_ =
-        JsonUtils::GetString(
-    json, Constant::Config::jsbsim_script);
-    if(impl_.jsbsim_script_ == "") {
+        JsonUtils::GetString(json, Constant::Config::jsbsim_script);
+    if (impl_.jsbsim_script_ == "") {
       impl_.jsbsim_model_ =
-        JsonUtils::GetString(
-      json, Constant::Config::jsbsim_model);
+          JsonUtils::GetString(json, Constant::Config::jsbsim_model);
     }
   } else {
     impl_.physics_type_ = PhysicsType::kNonPhysics;
