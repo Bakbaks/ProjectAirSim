@@ -26,6 +26,45 @@
 namespace microsoft {
 namespace projectairsim {
 
+namespace {
+
+Robot::TerrainElevationCallback BuildTerrainCallback(
+    Robot sim_robot) {
+  const double fallback_terrain_elevation_asl_m =
+      static_cast<double>(sim_robot.GetEnvironment().env_info.geo_point.altitude);
+  constexpr double kMaxReasonableNedDistanceMeters = 100000.0;
+
+  return [sim_robot, fallback_terrain_elevation_asl_m,
+          kMaxReasonableNedDistanceMeters](double x_m,
+                                           double y_m) mutable {
+    double query_x_m = x_m;
+    double query_y_m = y_m;
+
+    const bool invalid_or_extreme_query =
+        !std::isfinite(query_x_m) || !std::isfinite(query_y_m) ||
+        std::abs(query_x_m) > kMaxReasonableNedDistanceMeters ||
+        std::abs(query_y_m) > kMaxReasonableNedDistanceMeters;
+
+    if (invalid_or_extreme_query) {
+      const auto& current_position = sim_robot.GetKinematics().pose.position;
+      query_x_m = static_cast<double>(current_position.x());
+      query_y_m = static_cast<double>(current_position.y());
+    }
+
+    auto terrain_elevation_cb = sim_robot.GetTerrainElevationCallback();
+    if (terrain_elevation_cb != nullptr) {
+      const auto terrain_cb_val = terrain_elevation_cb(query_x_m, query_y_m);
+      if (std::isfinite(terrain_cb_val)) {
+        return terrain_cb_val;
+      }
+    }
+
+    return fallback_terrain_elevation_asl_m;
+  };
+}
+
+}  // namespace
+
 // -----------------------------------------------------------------------------
 // class JSBSimPhysicsBody
 
@@ -81,13 +120,13 @@ void JSBSimPhysicsBody::InitializeJSBSim(){
 
   double terrain_elevation_asl_m =
       sim_robot_.GetEnvironment().env_info.geo_point.altitude;
-  auto terrain_elevation_cb = sim_robot_.GetTerrainElevationCallback();
-  if (terrain_elevation_cb != nullptr) {
-    const auto& position = sim_robot_.GetKinematics().pose.position;
-    const auto terrain_cb_val = terrain_elevation_cb(position.x(), position.y());
-    if (std::isfinite(terrain_cb_val)) {
-      terrain_elevation_asl_m = terrain_cb_val;
-    }
+
+  auto terrain_elevation_cb = BuildTerrainCallback(sim_robot_);
+
+  const auto& position = sim_robot_.GetKinematics().pose.position;
+  const auto terrain_cb_val = terrain_elevation_cb(position.x(), position.y());
+  if (std::isfinite(terrain_cb_val)) {
+    terrain_elevation_asl_m = terrain_cb_val;
   }
 
   // Set terrain elevation at initial position
@@ -226,42 +265,10 @@ void JSBSimPhysicsModel::StepPhysicsBody(TimeNano dt_nanos,
     // Step 1 - Update physics body's data from robot's latest data
     fp_body->ReadRobotData();
     fp_body->EnsureJSBSimInitialized();
-    
 
-
-    //Step 2 - Calculate kinematics with collision response if needed
-    if (fp_body->NeedsCollisionResponse(fp_body->kinematics_)) {
-     if (fp_body->IsLandingCollision()) {
-       // Calculate the landed position to stick at by offsetting back
-       // along the collision normal with an additional kCollisionOffset margin
-       // to prevent getting stuck in a collided state.
-       // Calculate the landed position to stick at by offsetting back
-       // along the collision normal with an additional kCollisionOffset margin
-       // to prevent getting stuck in a collided state.
-       const Vector3 delta_position =
-           fp_body->collision_info_.normal *
-               (fp_body->collision_info_.penetration_depth +
-                JSBSimPhysicsBody::kCollisionOffset);
-      auto landed_position = fp_body->collision_info_.position + delta_position;
-       //next_kin = CalcNextKinematicsGrounded(
-       //    landed_position, fp_body->kinematics_.pose.orientation);
-       // TO-DO: set ground forces to model
-       next_kin = CalcNextKinematicsNoCollision(dt_sec, fp_body);
-       // set jsbsim to new position
-       fp_body->SetJSBSimAltitudeGrounded(-delta_position[2]);
-       next_kin.pose.position = landed_position;
-       fp_body->WriteRobotData(next_kin);
-     } else {
-       next_kin = CalcNextKinematicsWithCollision(dt_sec, fp_body);
-       fp_body->WriteRobotData(next_kin);
-       // Update environment to get updated geopoint
-       fp_body->sim_robot_.UpdateEnvironment();
-       fp_body->InitializeJSBSim();
-     }
-    } else {
-     next_kin = CalcNextKinematicsNoCollision(dt_sec, fp_body);    
-     fp_body->WriteRobotData(next_kin);
-    }    
+    // Use JSBSim-only integration path for collision handling in this mode.
+    next_kin = CalcNextKinematicsNoCollision(dt_sec, fp_body);
+    fp_body->WriteRobotData(next_kin);
   }
 }
 
@@ -392,6 +399,10 @@ Kinematics JSBSimPhysicsModel::CalcNextKinematicsWithCollision(
   const auto& friction = fp_body->friction_;
   const auto& mass_inv = fp_body->mass_inv_;
   const auto& inertia_inv = fp_body->inertia_inv_;
+  constexpr float kMinImpulseDenom = 1e-5f;
+  constexpr float kMinTangentNorm = 1e-4f;
+  constexpr float kMaxPenetrationDepth = 1.0f;
+  constexpr float kMaxDeltaVCollision = 20.0f;
 
   Kinematics kin_with_collision;  // main output of this function
 
@@ -430,9 +441,30 @@ Kinematics JSBSimPhysicsModel::CalcNextKinematicsWithCollision(
                      .cross(r_contact)
                      .dot(normal_body);
 
-  const float restitution_impulse = -contact_vel_body.dot(normal_body) *
-                                    (1.0f + restitution) /
-                                    restitution_impulse_denom;
+  if (!std::isfinite(restitution_impulse_denom) ||
+      std::abs(restitution_impulse_denom) < kMinImpulseDenom) {
+    kin_with_collision = cur_kin;
+    kin_with_collision.accels.linear = Vector3::Zero();
+    kin_with_collision.accels.angular = Vector3::Zero();
+    kin_with_collision.twist.linear = Vector3::Zero();
+    kin_with_collision.twist.angular = Vector3::Zero();
+    const auto penetration_depth_clamped =
+        std::clamp(collision_info.penetration_depth, 0.0f, kMaxPenetrationDepth);
+    kin_with_collision.pose.position =
+        collision_info.position +
+        (collision_info.normal * penetration_depth_clamped);
+    return kin_with_collision;
+  }
+
+  float restitution_impulse = -contact_vel_body.dot(normal_body) *
+                              (1.0f + restitution) /
+                              restitution_impulse_denom;
+
+  const float mass = mass_inv > kMinImpulseDenom ? (1.0f / mass_inv) : 0.0f;
+  const float max_impulse = mass * kMaxDeltaVCollision;
+  if (std::isfinite(max_impulse) && max_impulse > 0.0f) {
+    restitution_impulse = std::clamp(restitution_impulse, -max_impulse, max_impulse);
+  }
 
   // Step 2 - Add restitution impulse to next twist velocities
 
@@ -448,6 +480,20 @@ Kinematics JSBSimPhysicsModel::CalcNextKinematicsWithCollision(
   const Vector3 contact_tang_body =
       contact_vel_body - normal_body * normal_body.dot(contact_vel_body);
 
+  if (!std::isfinite(contact_tang_body.norm()) ||
+      contact_tang_body.norm() < kMinTangentNorm) {
+    kin_with_collision.accels.linear = Vector3::Zero();
+    kin_with_collision.accels.angular = Vector3::Zero();
+    const auto penetration_depth_clamped =
+        std::clamp(collision_info.penetration_depth, 0.0f, kMaxPenetrationDepth);
+    kin_with_collision.pose.position =
+        collision_info.position +
+        (collision_info.normal * penetration_depth_clamped) +
+        (kin_with_collision.twist.linear * dt_sec);
+    kin_with_collision.pose.orientation = cur_kin.pose.orientation;
+    return kin_with_collision;
+  }
+
   const Vector3 contact_tang_unit_body = contact_tang_body.normalized();
 
   const float friction_mag_denom =
@@ -455,8 +501,11 @@ Kinematics JSBSimPhysicsModel::CalcNextKinematicsWithCollision(
                      .cross(r_contact)
                      .dot(contact_tang_unit_body);
 
-  const float friction_mag =
+  float friction_mag =
       -contact_tang_body.norm() * friction / friction_mag_denom;
+  if (std::isfinite(max_impulse) && max_impulse > 0.0f) {
+    friction_mag = std::clamp(friction_mag, -max_impulse, max_impulse);
+  }
 
   // Step 4 - Add friction impulse to next twist velocities
 
@@ -478,7 +527,9 @@ Kinematics JSBSimPhysicsModel::CalcNextKinematicsWithCollision(
 
   kin_with_collision.pose.position =
       collision_info.position +
-      (collision_info.normal * collision_info.penetration_depth) +
+      (collision_info.normal *
+       std::clamp(collision_info.penetration_depth, 0.0f,
+            kMaxPenetrationDepth)) +
       (kin_with_collision.twist.linear * dt_sec);
 
   kin_with_collision.pose.orientation = cur_kin.pose.orientation;
