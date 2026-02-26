@@ -1888,39 +1888,46 @@ bool WorldSimApi::SetEnvActorLinkRotRate(const std::string& env_actor_name,
   return success;
 }
 
-float WorldSimApi::GetZAtPoint(const float x, const float y) {
-  // x and y in m
-  float distance;
-  static const float pointZ = 1000;  // m. Temp Z value to place the point
+float WorldSimApi::GetZAtPoint(float x, float y) {
+  // x and y in NED meters. Returns NED z (down, meters).
+  static const float start_z_ned_m = -1000.0f;
+  static const float end_z_ned_m = 10000.0f;
 
-  // Create an FVector using the provided X, Y, and Z coordinates.
-  const FVector LocVector = FVector(x, y, pointZ);
-  // convert vector to cm
-  const FVector LocVecCm = LocVector * 100.0f;
-  // Rotation of the component is fixed to downward facing
-  const FRotator DownwardRotation = FRotator(-90.0f, 0.0f, 0.0f);
+  const auto start_ned = projectairsim::Vector3(x, y, start_z_ned_m);
+  const auto end_ned = projectairsim::Vector3(x, y, end_z_ned_m);
 
-  const FVector RayDirectionVector =
-      UKismetMathLibrary::GetForwardVector(DownwardRotation);
-
-  // Calculate "EndTrace": point corresponding to end of ray trace.
-  const FVector EndTrace =
-      LocVecCm + (projectairsim::TransformUtils::ToCentimeters(pointZ) *
-                  RayDirectionVector);
+  const FVector start_trace = UnrealTransform::NedToUnrealLinear(start_ned);
+  const FVector end_trace = UnrealTransform::NedToUnrealLinear(end_ned);
 
   // Shoot ray via LineTraceSingleByChannel, result is saved in HitInfo
   FCollisionQueryParams TraceParams;
   TraceParams.bTraceComplex = true;
   TraceParams.bReturnPhysicalMaterial = false;
 
+  for (const auto& scene_object : scene_object_map_) {
+    AActor* actor = scene_object.Value;
+    if (actor != nullptr) {
+      const FString actor_name = actor->GetName();
+      const FString class_name =
+          actor->GetClass() != nullptr ? actor->GetClass()->GetName()
+                                       : TEXT("");
+      if (actor_name.Contains(TEXT("UnrealRobot")) ||
+          class_name.Contains(TEXT("UnrealRobot"))) {
+        TraceParams.AddIgnoredActor(actor);
+      }
+    }
+  }
+
   FHitResult HitInfo(ForceInit);
 
-  HitInfo = GetHitResult(LocVecCm, EndTrace, TraceParams);
+  HitInfo = GetHitResult(start_trace, end_trace, TraceParams);
+  if (!HitInfo.bBlockingHit) {
+    return std::numeric_limits<float>::quiet_NaN();
+  }
 
-  // float distance = HitInfo.Distance - pointZ;
-  distance = pointZ - HitInfo.Distance / 100;
+  const auto hit_ned = UnrealTransform::UnrealToNedLinear(HitInfo.ImpactPoint);
 
-  return distance;
+  return static_cast<float>(hit_ned.z());
 }
 
 FHitResult WorldSimApi::GetHitResult(const FVector& start, const FVector& end,
