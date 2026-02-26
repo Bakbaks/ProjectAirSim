@@ -25,6 +25,7 @@ add_library(
     physics_world.cpp
     matlab_physics.cpp
     jsbsim_physics.cpp
+    jsbsim_ground_callback.cpp
 )
 
 set_target_properties(${TARGET_NAME} PROPERTIES

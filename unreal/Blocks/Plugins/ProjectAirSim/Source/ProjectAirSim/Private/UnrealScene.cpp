@@ -5,6 +5,8 @@
 
 #include "UnrealScene.h"
 
+#include <limits>
+
 #include "CineCameraActor.h"
 #include "Components/SkinnedMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -21,6 +23,7 @@
 #include "UnrealHelpers.h"
 #include "UnrealLogger.h"
 #include "World/WeatherLib.h"
+#include "core_sim/actor/robot.hpp"
 #include "core_sim/clock.hpp"
 #include "Sensors/UnrealCamera.h"
 
@@ -365,6 +368,32 @@ void AUnrealScene::BeginPlay() {
   // Initialize WorldSimAPI, Weather, and TimeOfDay
   time_of_day.reset(new TimeOfDay(home_geo_point));
   world_api.reset(new WorldSimApi(unreal_world, time_of_day, sim_scene));
+
+  // Register terrain elevation callback for JSBSim robots. Callback returns
+  // terrain altitude ASL in meters from Unreal raycast.
+  const auto& actors = sim_scene->GetActors();
+  for (const auto& actor_ref : actors) {
+    auto& actor = actor_ref.get();
+    if (actor.GetType() == projectairsim::ActorType::kRobot) {
+      auto& sim_robot = static_cast<projectairsim::Robot&>(actor);
+      if (sim_robot.GetPhysicsType() ==
+          projectairsim::PhysicsType::kJSBSimPhysics) {
+        sim_robot.SetCallbackTerrainElevationUpdated(
+            [this](double x_ned_m, double y_ned_m) {
+              if (world_api == nullptr) {
+                return std::numeric_limits<double>::quiet_NaN();
+              }
+
+              const auto terrain_rel_m =
+                  world_api->GetZAtPoint(static_cast<float>(x_ned_m),
+                                         static_cast<float>(y_ned_m));
+
+              return static_cast<double>(home_geo_point.geo_point.altitude) +
+                     static_cast<double>(terrain_rel_m);
+            });
+      }
+    }
+  }
 
   UWeatherLib::initWeather(unreal_world, unreal_actors);
 

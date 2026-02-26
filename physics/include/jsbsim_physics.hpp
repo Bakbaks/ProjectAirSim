@@ -58,6 +58,7 @@ class JSBSimPhysicsBody : public BasePhysicsBody {
   static constexpr float kCollisionOffset = 0.001f;  // land with 1 mm air gap
 
  private:
+  void EnsureJSBSimInitialized();
   void InitializeJSBSim();
   Kinematics GetKinematicsFromModel();
   Vector3 GetModelAngularAcceleration();
@@ -72,6 +73,7 @@ class JSBSimPhysicsBody : public BasePhysicsBody {
   Vector3d home_geopoint_ned_;
   Vector3 home_geopoint_;
   std::shared_ptr<JSBSim::FGFDMExec> model_;
+  bool jsbsim_initialized_ = false;
 };
 
 // -----------------------------------------------------------------------------
