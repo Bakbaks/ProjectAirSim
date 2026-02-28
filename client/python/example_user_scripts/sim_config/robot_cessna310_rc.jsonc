@@ -1,7 +1,6 @@
 {
   "physics-type": "jsbsim-physics",
-  "jsbsim-script": "scripts/c3104_rc.xml",
-  "jsbsim-model": "c310",
+  "jsbsim-model": "c310_rc",
   "links": [
     {
       "name": "Frame",
