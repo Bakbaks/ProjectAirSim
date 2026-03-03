@@ -2,6 +2,7 @@
 
 #include "RHI.h"
 #include "RHIResources.h"
+#include "RHIGPUReadback.h"
 #include "SceneViewExtension.h"
 
 #include "LidarPointCloudCS.h"
@@ -45,6 +46,11 @@ public:
   std::vector<FVector4> LidarPointCloudData;
 
 private:
+  static const int32 NumReadbackBuffers = 4;
+  TUniquePtr<FRHIGPUBufferReadback> ReadbackBuffers[NumReadbackBuffers];
+  uint32 ReadbackBuffersSizes[NumReadbackBuffers];
+  int32 CurrentReadbackIndex = 0;
+  
   std::queue<FLidarPointCloudCSParameters> CSParamsQ;
   TWeakObjectPtr<UTextureRenderTarget2D> RenderTarget2D;
 };
