@@ -15,6 +15,8 @@
 #include "Runtime/Core/Public/Async/ParallelFor.h"
 #include "Runtime/Engine/Classes/Kismet/KismetMathLibrary.h"
 #include "UnrealLogger.h"
+#include "UnrealTransforms.h"
+#include "core_sim/clock.hpp"
 
 namespace projectairsim = microsoft::projectairsim;
 
@@ -56,8 +58,24 @@ void UUnrealLidar::TickComponent(
 
   // Move sensor data to pending report buffers
   if (!Settings.report_no_return_points) {
+    size_t NumReturns = 0;
+    for (const uint8_t bReturned : ReturnCloud) {
+      NumReturns += (bReturned != 0) ? 1 : 0;
+    }
+
+    if (Settings.report_point_cloud) {
+      PointCloudPending.reserve(PointCloudPending.size() + NumReturns * 3);
+    }
+    if (Settings.report_azimuth_elevation_range) {
+      AzimuthElevationRangeCloudPending.reserve(
+          AzimuthElevationRangeCloudPending.size() + NumReturns * 3);
+    }
+    SegmentationCloudPending.reserve(SegmentationCloudPending.size() + NumReturns);
+    IntensityCloudPending.reserve(IntensityCloudPending.size() + NumReturns);
+    LaserIndexCloudPending.reserve(LaserIndexCloudPending.size() + NumReturns);
+
     // Filter through the arrays and remove all no-return points
-    for (int32 i = 0; i < ReturnCloud.size(); i++) {
+    for (size_t i = 0; i < ReturnCloud.size(); ++i) {
       if (ReturnCloud[i]) {
         if (Settings.report_point_cloud) {
           PointCloudPending.push_back(PointCloud[i * 3]);
@@ -128,8 +146,8 @@ void UUnrealLidar::TickComponent(
                                      LaserIndexCloud.size());
       LaserIndexCloudPending.insert(
           LaserIndexCloudPending.end(),
-          std::make_move_iterator(IntensityCloud.begin()),
-          std::make_move_iterator(IntensityCloud.end()));
+          std::make_move_iterator(LaserIndexCloud.begin()),
+          std::make_move_iterator(LaserIndexCloud.end()));
     }
   }
   AzimuthElevationRangeCloud.clear();
@@ -214,6 +232,15 @@ void UUnrealLidar::SetupLidarFromSettings(
                                  : projectairsim::SimClock::Get()->SecToNanos(
                                        1.0f / Settings.report_frequency);
 
+  LidarRangeCentimeters =
+      projectairsim::TransformUtils::ToCentimeters(Settings.range);
+  LaserTraceParams =
+      FCollisionQueryParams(SCENE_QUERY_STAT(UnrealLidar), true);
+  LaserTraceParams.bReturnPhysicalMaterial = false;
+  if (Settings.disable_self_hits && OwnerActor) {
+    LaserTraceParams.AddIgnoredActor(OwnerActor);
+  }
+
   // Save scan axis orientation
   {
     auto quaternion = Settings.scan_orientation.normalized();
@@ -254,7 +281,8 @@ void UUnrealLidar::InitializePose(const projectairsim::Transform& PoseNed) {
 // Simulate shooting a laser via Unreal ray-tracing.
 FHitResult UUnrealLidar::ShootSingleLaser(const LaserDirection& LaserDir,
                                           const FVector& LidarBodyLoc,
-                                          const FRotator& LidarBodyRot) {
+                                          const FRotator& LidarBodyRot,
+                                          const FCollisionQueryParams& TraceParams) {
   const FRotator LaserRotInSensorFrame(LaserDir.VerticalAngleDeg,   /*pitch*/
                                        LaserDir.HorizontalAngleDeg, /*yaw*/
                                        0 /*roll*/);
@@ -270,17 +298,9 @@ FHitResult UUnrealLidar::ShootSingleLaser(const LaserDirection& LaserDir,
                          LaserDir.OffsetDistanceVertical;
 
   // Calculate "EndTrace": point corresponding to end of ray trace.
-  const FVector EndTrace =
-      LaserLoc + (projectairsim::TransformUtils::ToCentimeters(Settings.range) *
-                  RayDirectionVector);
+  const FVector EndTrace = LaserLoc + (LidarRangeCentimeters * RayDirectionVector);
 
   // Shoot ray via LineTraceSingleByChannel, result is saved in HitInfo
-  FCollisionQueryParams TraceParams;
-  if (Settings.disable_self_hits) {
-    TraceParams.AddIgnoredActor(OwnerActor);  // don't hit yourself
-  }
-  TraceParams.bTraceComplex = true;
-  TraceParams.bReturnPhysicalMaterial = false;
 
   FHitResult HitInfo(ForceInit);
 
@@ -349,42 +369,45 @@ void UUnrealLidar::Simulate(const float SimTimeDeltaSec) {
   const bool bReportPointCloud = Settings.report_point_cloud;
   const bool bReportAzimuthElevationRange =
       Settings.report_azimuth_elevation_range;
+  const bool bDrawDebugPoints = Settings.draw_debug_points;
 
-  FCriticalSection Mutex;
   TArray<FHitResult> GroundTruthHits;
+  FCriticalSection GroundTruthHitsMutex;
+
+  const int32 NumLasers = LasersToShoot.Num();
+  if (NumLasers <= 0) {
+    PScanPattern->EndScan();
+    return;
+  }
+
+  if (bDrawDebugPoints) {
+    GroundTruthHits.Reserve(NumLasers);
+  }
 
   if (bReportPointCloud) {
-    for (int32 i = 0; i < LasersToShoot.Num(); i++) {
-      PointCloud.push_back(NoReturnX);
-      PointCloud.push_back(NoReturnY);
-      PointCloud.push_back(NoReturnZ);
+    PointCloud.resize(NumLasers * 3);
+    for (int32 i = 0; i < NumLasers; ++i) {
+      PointCloud[i * 3] = NoReturnX;
+      PointCloud[i * 3 + 1] = NoReturnY;
+      PointCloud[i * 3 + 2] = NoReturnZ;
     }
   }
   if (bReportAzimuthElevationRange) {
-    AzimuthElevationRangeCloud.insert(AzimuthElevationRangeCloud.begin(),
-                                      LasersToShoot.Num() * 3, 0);
+    AzimuthElevationRangeCloud.resize(NumLasers * 3, 0.0f);
   }
-  SegmentationCloud.insert(SegmentationCloud.begin(), LasersToShoot.Num(), 0);
-  IntensityCloud.insert(IntensityCloud.begin(), LasersToShoot.Num(), 0);
-  LaserIndexCloud.insert(LaserIndexCloud.begin(), LasersToShoot.Num(), 0);
-  ReturnCloud.insert(ReturnCloud.begin(), LasersToShoot.Num(), false);
+  SegmentationCloud.resize(NumLasers, NoSegmentationID);
+  IntensityCloud.resize(NumLasers, 0.0f);
+  LaserIndexCloud.resize(NumLasers, 0);
+  ReturnCloud.resize(NumLasers, 0);
 
-  ParallelFor(LasersToShoot.Num(), [&](int32 Idx) {
+  ParallelFor(NumLasers, [&](int32 Idx) {
     const FHitResult HitInfo =
-        ShootSingleLaser(LasersToShoot[Idx], LidarBodyLoc, LidarScanRot);
+        ShootSingleLaser(LasersToShoot[Idx], LidarBodyLoc, LidarScanRot,
+                         LaserTraceParams);
 
     if (HitInfo.bBlockingHit == false) {
       // No laser return
       if (bReportNoReturnPoints) {
-        // Add a special point value indicating no laser return
-        Mutex.Lock();
-
-        if (bReportPointCloud) {
-          PointCloud[Idx * 3] = NoReturnX;
-          PointCloud[Idx * 3 + 1] = NoReturnY;
-          PointCloud[Idx * 3 + 2] = NoReturnZ;
-        }
-
         if (bReportAzimuthElevationRange) {
           double Azimuth = LasersToShoot[Idx].HorizontalAngleDeg;
           double Elevation = LasersToShoot[Idx].VerticalAngleDeg;
@@ -396,9 +419,7 @@ void UUnrealLidar::Simulate(const float SimTimeDeltaSec) {
         SegmentationCloud[Idx] = NoSegmentationID;
         IntensityCloud[Idx] = 0.0f;
         LaserIndexCloud[Idx] = LasersToShoot[Idx].Channel;
-        ReturnCloud[Idx] = false;
-
-        Mutex.Unlock();
+        ReturnCloud[Idx] = 0;
       }
     } else {
       // Get CustomDepthStencilValue directly from the hit component
@@ -414,8 +435,6 @@ void UUnrealLidar::Simulate(const float SimTimeDeltaSec) {
 
       const projectairsim::Vector3 PointNed =
           UnrealTransform::UnrealToNedLinear(Point);
-
-      Mutex.Lock();
 
       if (bReportPointCloud) {
         PointCloud[Idx * 3] = PointNed.x();
@@ -438,19 +457,18 @@ void UUnrealLidar::Simulate(const float SimTimeDeltaSec) {
       SegmentationCloud[Idx] = SegmentationID;
       IntensityCloud[Idx] = CalculateIntensity(HitInfo);
       LaserIndexCloud[Idx] = LasersToShoot[Idx].Channel;
-      ReturnCloud[Idx] = true;
+      ReturnCloud[Idx] = 1;
 
-      if (Settings.draw_debug_points) {
+      if (bDrawDebugPoints) {
+        FScopeLock ScopeLock(&GroundTruthHitsMutex);
         GroundTruthHits.Add(HitInfo);
       }
-
-      Mutex.Unlock();
     }
   });
 
   // 3. Optional - draw debug hit points on Unreal scene
 
-  if (Settings.draw_debug_points && UnrealWorld) {
+  if (bDrawDebugPoints && UnrealWorld) {
     for (const auto& HitInfo : GroundTruthHits) {
       DrawDebugPoint(UnrealWorld, HitInfo.ImpactPoint,
                      10,                   // size
