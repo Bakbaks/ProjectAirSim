@@ -1,0 +1,265 @@
+{
+  // This config bridges a SimpleFlight controller with JSBSim physics via
+  // jsbsim-rotor actuators. JSBSim handles all physics (thrust, torque,
+  // aerodynamics, inertia). Links only carry visual info.
+  "physics-type": "jsbsim-physics",
+  "jsbsim-model": "quadrotor_x",
+  "links": [
+    {
+      "name": "Frame",
+      // No inertial/collision/aerodynamics — JSBSim handles all physics.
+      "visual": {
+        "geometry": {
+          "type": "unreal_mesh",
+          "name": "/Drone/Quadrotor1"
+        }
+      }
+    },
+    {
+      "name": "Prop_FL",
+      "visual": {
+        "origin": {
+          "xyz": "0.253 -0.253 -0.01",
+          "rpy-deg": "0 0 0"
+        },
+        "geometry": {
+          "type": "unreal_mesh",
+          "name": "/Drone/PropellerRed"
+        }
+      }
+    },
+    {
+      "name": "Prop_FR",
+      "visual": {
+        "origin": {
+          "xyz": "0.253 0.253 -0.01",
+          "rpy-deg": "0 0 0"
+        },
+        "geometry": {
+          "type": "unreal_mesh",
+          "name": "/Drone/PropellerRed"
+        }
+      }
+    },
+    {
+      "name": "Prop_RL",
+      "visual": {
+        "origin": {
+          "xyz": "-0.253 -0.253 -0.01",
+          "rpy-deg": "0 0 0"
+        },
+        "geometry": {
+          "type": "unreal_mesh",
+          "name": "/Drone/PropellerWhite"
+        }
+      }
+    },
+    {
+      "name": "Prop_RR",
+      "visual": {
+        "origin": {
+          "xyz": "-0.253 0.253 -0.01",
+          "rpy-deg": "0 0 0"
+        },
+        "geometry": {
+          "type": "unreal_mesh",
+          "name": "/Drone/PropellerWhite"
+        }
+      }
+    }
+  ],
+  "joints": [
+    {
+      "id": "Frame_Prop_FL",
+      "type": "fixed",
+      "parent-link": "Frame",
+      "child-link": "Prop_FL",
+      "axis": "0 0 1"
+    },
+    {
+      "id": "Frame_Prop_FR",
+      "type": "fixed",
+      "parent-link": "Frame",
+      "child-link": "Prop_FR",
+      "axis": "0 0 1"
+    },
+    {
+      "id": "Frame_Prop_RL",
+      "type": "fixed",
+      "parent-link": "Frame",
+      "child-link": "Prop_RL",
+      "axis": "0 0 1"
+    },
+    {
+      "id": "Frame_Prop_RR",
+      "type": "fixed",
+      "parent-link": "Frame",
+      "child-link": "Prop_RR",
+      "axis": "0 0 1"
+    }
+  ],
+  "controller": {
+    "id": "Simple_Flight_Controller",
+    "airframe-setup": "quadrotor-x",
+    "type": "simple-flight-api",
+    "simple-flight-api-settings": {
+      "actuator-order": [
+        { "id": "Prop_FR_actuator" },
+        { "id": "Prop_RL_actuator" },
+        { "id": "Prop_FL_actuator" },
+        { "id": "Prop_RR_actuator" }
+      ]
+    }
+  },
+  "actuators": [
+    {
+      "name": "Prop_FL_actuator",
+      "type": "jsbsim-rotor",
+      "enabled": true,
+      "parent-link": "Frame",
+      "child-link": "Prop_FL",
+      "jsbsim-rotor-settings": {
+        "jsbsim-cmd": "fcs/esc-cmd-norm[0]",
+        "jsbsim-state": "fcs/esc-out[0]",
+        "turning-direction": "clock-wise"
+      }
+    },
+    {
+      "name": "Prop_FR_actuator",
+      "type": "jsbsim-rotor",
+      "enabled": true,
+      "parent-link": "Frame",
+      "child-link": "Prop_FR",
+      "jsbsim-rotor-settings": {
+        "jsbsim-cmd": "fcs/esc-cmd-norm[1]",
+        "jsbsim-state": "fcs/esc-out[1]",
+        "turning-direction": "counter-clock-wise"
+      }
+    },
+    {
+      "name": "Prop_RL_actuator",
+      "type": "jsbsim-rotor",
+      "enabled": true,
+      "parent-link": "Frame",
+      "child-link": "Prop_RL",
+      "jsbsim-rotor-settings": {
+        "jsbsim-cmd": "fcs/esc-cmd-norm[2]",
+        "jsbsim-state": "fcs/esc-out[2]",
+        "turning-direction": "counter-clock-wise"
+      }
+    },
+    {
+      "name": "Prop_RR_actuator",
+      "type": "jsbsim-rotor",
+      "enabled": true,
+      "parent-link": "Frame",
+      "child-link": "Prop_RR",
+      "jsbsim-rotor-settings": {
+        "jsbsim-cmd": "fcs/esc-cmd-norm[3]",
+        "jsbsim-state": "fcs/esc-out[3]",
+        "turning-direction": "clock-wise"
+      }
+    }
+  ],
+  "sensors": [
+    {
+      "id": "Chase",
+      "type": "camera",
+      "enabled": true,
+      "parent-link": "Frame",
+      "capture-interval": 0.03,
+      "capture-settings": [
+        {
+          "image-type": 0,
+          "width": 1280,
+          "height": 720,
+          "fov-degrees": 90,
+          "capture-enabled": false,
+          "streaming-enabled": true,
+          "pixels-as-float": false,
+          "compress": false,
+          "target-gamma": 2.5
+        }
+      ],
+      "gimbal": {
+        "lock-roll": true,
+        "lock-pitch": true,
+        "lock-yaw": false
+      },
+      "origin": {
+        "xyz": "-10.0 0.0 -1.0",
+        "rpy-deg": "0 -11.46 0"
+      }
+    },
+    {
+      "id": "DownCamera",
+      "type": "camera",
+      "enabled": true,
+      "parent-link": "Frame",
+      "capture-interval": 0.02,
+      "capture-settings": [
+        {
+          "image-type": 0,
+          "width": 400,
+          "height": 225,
+          "fov-degrees": 90,
+          "capture-enabled": true,
+          "streaming-enabled": false,
+          "pixels-as-float": false,
+          "compress": false,
+          "target-gamma": 2.5
+        },
+        {
+          "image-type": 2,
+          "width": 400,
+          "height": 225,
+          "fov-degrees": 90,
+          "capture-enabled": true,
+          "streaming-enabled": false,
+          "pixels-as-float": false,
+          "compress": false
+        }
+      ],
+      "origin": {
+        "xyz": "0 0.0 0.0",
+        "rpy-deg": "0 -90 0"
+      }
+    },
+    {
+      "id": "IMU1",
+      "type": "imu",
+      "enabled": true,
+      "parent-link": "Frame",
+      "accelerometer": {
+        "velocity-random-walk": 2.353e-3,
+        "tau": 800,
+        "bias-stability": 3.53e-4,
+        "turn-on-bias": "0 0 0"
+      },
+      "gyroscope": {
+        "angle-random-walk": 8.72644e-5,
+        "tau": 500,
+        "bias-stability": 2.23014e-5,
+        "turn-on-bias": "0 0 0"
+      }
+    },
+    {
+      "id": "GPS",
+      "type": "gps",
+      "enabled": true,
+      "parent-link": "Frame"
+    },
+    {
+      "id": "Barometer",
+      "type": "barometer",
+      "enabled": true,
+      "parent-link": "Frame"
+    },
+    {
+      "id": "Magnetometer",
+      "type": "magnetometer",
+      "enabled": true,
+      "parent-link": "Frame"
+    }
+  ]
+}
