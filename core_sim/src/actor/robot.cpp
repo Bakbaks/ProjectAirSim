@@ -12,6 +12,7 @@
 #include "algorithms.hpp"
 #include "constant.hpp"
 #include "core_sim/actuators/actuator.hpp"
+#include "core_sim/actuators/jsbsim_rotor.hpp"
 #include "core_sim/earth_utils.hpp"
 #include "core_sim/json_utils.hpp"
 #include "core_sim/logger.hpp"
@@ -535,12 +536,19 @@ void Robot::Impl::Load(ConfigJson config_json) {
   // should have been set during robot construction in the scene).
   UpdateEnvironment();
 
-  //! Initialize Sensors
+  // Initialize Sensors
   InitializeSensors(GetKinematics(), GetEnvironment());
 
   // check if using jsbsim physics to initialize jsbsim
   if(physics_type_ == PhysicsType::kJSBSimPhysics) {
     InitializeJSBSimModel();
+
+    // Wire JSBSim model to JSBSimRotor actuators
+    for (auto& actuator : actuators_) {
+      if (actuator->GetType() == ActuatorType::kJSBSimRotor) {
+        static_cast<JSBSimRotor&>(*actuator).SetJSBSimModel(model_);
+      }
+    }
   }
 
   // Create tilt actuator target list
@@ -1166,6 +1174,16 @@ void Robot::Impl::UpdateActuators(const TimeNano sim_time,
 
         // Get power consumption
         total_power_ += rotor.GetPowerConsumption();
+      } else if (actuator->GetType() == ActuatorType::kJSBSimRotor) {
+        auto& jrotor = static_cast<JSBSimRotor&>(*actuator);
+
+        // Add rotor info for visualization (no real thrust/torque — JSBSim
+        // handles that)
+        rotor_info_vec.push_back(RotorInfo(
+            actuator->GetId(), jrotor.GetRotatingSpeed(), jrotor.GetAngle(),
+            0.0f /*torque*/, 0.0f /*thrust*/));
+
+        actuated_transforms = jrotor.GetActuatedTransforms();
       } else if (actuator->GetType() == ActuatorType::kTilt) {
         auto& tilt = static_cast<Tilt&>(*actuator);
 

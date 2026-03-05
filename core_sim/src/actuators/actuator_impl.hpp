@@ -18,6 +18,7 @@
 #include "core_sim/actuators/gimbal.hpp"
 #include "core_sim/actuators/lift_drag_control_surface.hpp"
 #include "core_sim/actuators/rotor.hpp"
+#include "core_sim/actuators/jsbsim_rotor.hpp"
 #include "core_sim/actuators/wheel.hpp"
 #include "core_sim/actuators/tilt.hpp"
 #include "core_sim/error.hpp"
@@ -145,6 +146,13 @@ class ActuatorImpl : public ComponentWithTopicsAndServiceMethods {
       wheel->Load(json);
       return std::unique_ptr<Actuator>(wheel);
     } 
+    else if (type == Constant::Config::jsbsim_rotor) {
+      auto jsbsim_rotor = new JSBSimRotor(
+          id, enabled, parent_link, child_link, actor_logger, topic_manager,
+          parent_topic_path, service_manager, state_manager);
+      jsbsim_rotor->Load(json);
+      return std::unique_ptr<Actuator>(jsbsim_rotor);
+    }
     else {
       actor_logger.LogError(actor_name, "[%s] Invalid actuator type '%s'.",
                             id.c_str(), type.c_str());

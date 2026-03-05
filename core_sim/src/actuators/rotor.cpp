@@ -227,7 +227,8 @@ Rotor::Impl::Impl(const std::string& id, bool is_enabled,
       angle_cur_(0.0f),
       quat_tilt_(Quaternion::Identity()),
       transform_refframe_(std::string("AR ") + id,
-                          &rotor_settings_.origin_setting) {
+                          &rotor_settings_.origin_setting),
+      topics_() {
   SetTopicPath();
   CreateTopics();
   ActuatorImpl::RegisterServiceMethods();
@@ -289,6 +290,7 @@ void Rotor::Impl::UpdateActuatorOutput(std::vector<float> && control_signals,
                             const TimeNano sim_dt_nanos){
   // This actuator uses one control signal
   auto control_signal = control_signals[0];
+
   // Apply first order filter to simulate actuator hardware dynamics
   TimeSec dt_sec = sim_dt_nanos / 1.0e9;
   first_order_filter_.SetInput(std::clamp(control_signal, 0.0f, 1.0f));
