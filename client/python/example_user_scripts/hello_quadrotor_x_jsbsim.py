@@ -68,7 +68,7 @@ async def main():
         # image_display.start()
 
         # drone.enable_api_control()
-        set_jsbsim_attributes(drone)
+        # set_jsbsim_attributes(drone)
         # # drone.arm()
 
         # projectairsim_log().info("takeoff_async: starting")

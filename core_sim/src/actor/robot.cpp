@@ -12,7 +12,6 @@
 #include "algorithms.hpp"
 #include "constant.hpp"
 #include "core_sim/actuators/actuator.hpp"
-#include "core_sim/actuators/jsbsim_rotor.hpp"
 #include "core_sim/earth_utils.hpp"
 #include "core_sim/json_utils.hpp"
 #include "core_sim/logger.hpp"
@@ -140,7 +139,7 @@ class Robot::Impl : public ActorImpl {
   const PhysicsType& GetPhysicsType() const;
   void SetPhysicsType(const PhysicsType& phys_type);
   //used only by JSBSim physics and controller
-  std::shared_ptr<JSBSim::FGFDMExec> GetJSBSimModel() const;
+  std::shared_ptr<::JSBSim::FGFDMExec> GetJSBSimModel() const;
   const std::string& GetPhysicsConnectionSettings() const;
   void SetPhysicsConnectionSettings(const std::string& phys_conn_settings);
   const std::string& GetControlConnectionSettings() const;
@@ -194,7 +193,7 @@ class Robot::Impl : public ActorImpl {
   PhysicsType physics_type_;
   std::string jsbsim_script_;
   std::string jsbsim_model_;
-  std::shared_ptr<JSBSim::FGFDMExec> model_;
+  std::shared_ptr<::JSBSim::FGFDMExec> model_;
   std::string physics_connection_settings_;
   std::string control_connection_settings_;
   bool start_landed_;
@@ -389,7 +388,7 @@ void Robot::SetPhysicsType(const PhysicsType& phys_type) {
   static_cast<Robot::Impl*>(pimpl_.get())->SetPhysicsType(phys_type);
 }
 
-std::shared_ptr<JSBSim::FGFDMExec> Robot::GetJSBSimModel() const {
+std::shared_ptr<::JSBSim::FGFDMExec> Robot::GetJSBSimModel() const {
   return static_cast<Robot::Impl*>(pimpl_.get())->GetJSBSimModel();
 }
 
@@ -543,10 +542,13 @@ void Robot::Impl::Load(ConfigJson config_json) {
   if(physics_type_ == PhysicsType::kJSBSimPhysics) {
     InitializeJSBSimModel();
 
-    // Wire JSBSim model to JSBSimRotor actuators
+    // Wire JSBSim model to rotor actuators that have jsbsim-cmd configured
     for (auto& actuator : actuators_) {
-      if (actuator->GetType() == ActuatorType::kJSBSimRotor) {
-        static_cast<JSBSimRotor&>(*actuator).SetJSBSimModel(model_);
+      if (actuator->GetType() == ActuatorType::kRotor) {
+        auto& rotor = static_cast<Rotor&>(*actuator);
+        if (!rotor.GetRotorSettings().jsbsim_cmd.empty()) {
+          rotor.SetJSBSimModel(model_);
+        }
       }
     }
   }
@@ -758,7 +760,7 @@ void Robot::Impl::RegisterServiceMethods() {
 }
 
 void Robot::Impl::InitializeJSBSimModel(){
-  model_ = std::make_shared<JSBSim::FGFDMExec>();
+  model_ = std::make_shared<::JSBSim::FGFDMExec>();
   std::string jsbsim_root_path =
         working_simulation_path_ + "/SimLibs/core_sim/jsbsim/models/";
   model_->SetRootDir(SGPath(jsbsim_root_path));
@@ -1018,7 +1020,7 @@ void Robot::Impl::SetPhysicsType(const PhysicsType& phys_type) {
 
 const std::string& Robot::Impl::GetJSBSimScript() const { return jsbsim_script_; }
 
-std::shared_ptr<JSBSim::FGFDMExec> Robot::Impl::GetJSBSimModel() const { return model_; }
+std::shared_ptr<::JSBSim::FGFDMExec> Robot::Impl::GetJSBSimModel() const { return model_; }
 
 const std::string& Robot::Impl::GetPhysicsConnectionSettings() const {
   return physics_connection_settings_;
@@ -1174,16 +1176,6 @@ void Robot::Impl::UpdateActuators(const TimeNano sim_time,
 
         // Get power consumption
         total_power_ += rotor.GetPowerConsumption();
-      } else if (actuator->GetType() == ActuatorType::kJSBSimRotor) {
-        auto& jrotor = static_cast<JSBSimRotor&>(*actuator);
-
-        // Add rotor info for visualization (no real thrust/torque — JSBSim
-        // handles that)
-        rotor_info_vec.push_back(RotorInfo(
-            actuator->GetId(), jrotor.GetRotatingSpeed(), jrotor.GetAngle(),
-            0.0f /*torque*/, 0.0f /*thrust*/));
-
-        actuated_transforms = jrotor.GetActuatedTransforms();
       } else if (actuator->GetType() == ActuatorType::kTilt) {
         auto& tilt = static_cast<Tilt&>(*actuator);
 

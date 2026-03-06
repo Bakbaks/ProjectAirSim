@@ -23,14 +23,7 @@ enum class ActuatorType {
   kLiftDragControlSurface = 1,
   kTilt = 2,
   kGimbal = 3,
-  kWheel = 4,
-  kJSBSimThrottle = 5,
-  kJSBSimAileron = 6,
-  kJSBSimElevator = 7,
-  kJSBSimRudder = 8,
-  kJSBSimFlap = 9,
-  kJSBSimLandingGear = 10,
-  kJSBSimRotor = 11
+  kWheel = 4
 };
 
 // Abstract base class

@@ -61,20 +61,6 @@ class Constant {
         "microsoft::projectairsim::actuators::rotor";
     static constexpr const char* wheel =
         "microsoft::projectairsim::actuators::wheel";
-    static constexpr const char* jsbsim_rotor =
-        "microsoft::projectairsim::actuators::jsbsim_rotor";
-    static constexpr const char* jsbsim_throttle =
-        "microsoft::projectairsim::actuators::jsbsim_throttle";
-    static constexpr const char* jsbsim_aileron =
-        "microsoft::projectairsim::actuators::jsbsim_aileron";
-    static constexpr const char* jsbsim_elevator =
-        "microsoft::projectairsim::actuators::jsbsim_elevator";
-    static constexpr const char* jsbsim_rudder =
-        "microsoft::projectairsim::actuators::jsbsim_rudder";
-    static constexpr const char* jsbsim_flap =
-        "microsoft::projectairsim::actuators::jsbsim_flap";
-    static constexpr const char* jsbsim_landing_gear =
-        "microsoft::projectairsim::actuators::jsbsim_landing_gear";
     static constexpr const char* simple_flight_api =
         "microsoft::projectairsim::multirotor_api::simple_flight_api";
     static constexpr const char* simple_drive_api =
@@ -391,7 +377,6 @@ class Constant {
     static constexpr const char* rcs_sqm_min = "rcs-sqm-min";
     //! Actuator related config parameters
     static constexpr const char* rotor = "rotor";
-    static constexpr const char* jsbsim_rotor = "jsbsim-rotor";
     static constexpr const char* wheel = "wheel";
     static constexpr const char* physics = "physics";
     static constexpr const char* physics_type = "physics-type";
@@ -442,7 +427,6 @@ class Constant {
     static constexpr const char* propeller_height = "propeller-height";
     static constexpr const char* smoothing_tc = "smoothing-tc";
     static constexpr const char* rotor_settings = "rotor-settings";
-    static constexpr const char* jsbsim_rotor_settings = "jsbsim-rotor-settings";
     static constexpr const char* jsbsim_cmd = "jsbsim-cmd";
     static constexpr const char* jsbsim_state = "jsbsim-state";
     static constexpr const char* wheel_settings = "wheel-settings";
