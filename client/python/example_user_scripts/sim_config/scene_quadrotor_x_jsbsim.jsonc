@@ -5,10 +5,10 @@
       "type": "robot",
       "name": "Drone1",
       "origin": {
-        "xyz": "-1.0 8.0 -3.0",
-        "rpy-deg": "0 0 -45"
+        "xyz": "0.0 0.0 -4.0",
+        "rpy-deg": "0 0 0"
       },
-      "robot-config": "robot_quadrotor_x_jsbsim.jsonc"
+      "robot-config": "robot_quadrotor_x_jsbsim_simpleflight.jsonc"
     }
   ],
   "clock": {

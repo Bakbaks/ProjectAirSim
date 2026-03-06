@@ -17,6 +17,9 @@
 #include "core_sim/physics_common_types.hpp"
 #include "json.hpp"
 
+// JSBSim include (requires RTTI, must be in .cpp not .hpp)
+#include "FGFDMExec.h"
+
 namespace microsoft {
 namespace projectairsim {
 
@@ -82,6 +85,10 @@ class Rotor::Impl : public ActuatorImpl {
 
   void SetTilt(Quaternion quat);
 
+  void SetJSBSimModel(std::shared_ptr<JSBSim::FGFDMExec> model);
+
+  float GetJSBSimState() const;
+
   operator const TransformTree::RefFrame&(void) const;
 
  private:
@@ -105,6 +112,8 @@ class Rotor::Impl : public ActuatorImpl {
   TransformTree::TransformRefFrame
       transform_refframe_;  // Our RefFrame with pose from
                             // rotor_settings_.origin
+
+  std::shared_ptr<JSBSim::FGFDMExec> jsbsim_model_;
 
   // TODO make a rotor topic
   // topic scene_image_topic;
@@ -189,6 +198,14 @@ void Rotor::SetTilt(Quaternion quat) {
   static_cast<Rotor::Impl*>(pimpl_.get())->SetTilt(quat);
 }
 
+void Rotor::SetJSBSimModel(std::shared_ptr<JSBSim::FGFDMExec> model) {
+  static_cast<Rotor::Impl*>(pimpl_.get())->SetJSBSimModel(model);
+}
+
+float Rotor::GetJSBSimState() const {
+  return static_cast<Rotor::Impl*>(pimpl_.get())->GetJSBSimState();
+}
+
 Rotor::operator TransformTree::RefFrame&(void) {
   // Call const version to avoid duplicating it with a non-cost version in the
   // impl--const_cast safe to do because this object is non-const in this call
@@ -228,7 +245,7 @@ Rotor::Impl::Impl(const std::string& id, bool is_enabled,
       quat_tilt_(Quaternion::Identity()),
       transform_refframe_(std::string("AR ") + id,
                           &rotor_settings_.origin_setting),
-      topics_() {
+      jsbsim_model_(nullptr) {
   SetTopicPath();
   CreateTopics();
   ActuatorImpl::RegisterServiceMethods();
@@ -286,10 +303,31 @@ void Rotor::Impl::SetAirDensityRatio(float air_density_ratio) {
 
 void Rotor::Impl::SetTilt(Quaternion quat) { quat_tilt_ = quat; }
 
+void Rotor::Impl::SetJSBSimModel(
+    std::shared_ptr<JSBSim::FGFDMExec> model) {
+  jsbsim_model_ = model;
+}
+
+float Rotor::Impl::GetJSBSimState() const {
+  if (!rotor_settings_.jsbsim_state.empty() && jsbsim_model_ != nullptr) {
+    return static_cast<float>(
+        jsbsim_model_->GetPropertyValue(rotor_settings_.jsbsim_state));
+  }
+  return -1.0f;
+}
+
 void Rotor::Impl::UpdateActuatorOutput(std::vector<float> && control_signals,
                             const TimeNano sim_dt_nanos){
   // This actuator uses one control signal
   auto control_signal = control_signals[0];
+
+  // If JSBSim bridge is configured, write control signal to JSBSim property
+  if (!rotor_settings_.jsbsim_cmd.empty() && jsbsim_model_ != nullptr) {
+    jsbsim_model_->SetPropertyValue(
+        rotor_settings_.jsbsim_cmd,
+        static_cast<double>(std::clamp(control_signal, 0.0f, 1.0f)));
+    return;  // Skip the rest of the update since JSBSim will be controlling the rotor and providing feedback through GetJSBSimState()
+  }
 
   // Apply first order filter to simulate actuator hardware dynamics
   TimeSec dt_sec = sim_dt_nanos / 1.0e9;
@@ -446,6 +484,14 @@ void Rotor::Loader::LoadRotorSetting(const json& json) {
     impl_.rotor_settings_.smoothing_tc = JsonUtils::GetNumber<float>(
         rotor_settings_json, Constant::Config::smoothing_tc,
         default_rotor_setting.smoothing_tc);
+
+    // Optional JSBSim bridge properties
+    impl_.rotor_settings_.jsbsim_cmd = JsonUtils::GetString(
+        rotor_settings_json, Constant::Config::jsbsim_cmd, "");
+
+    impl_.rotor_settings_.jsbsim_state = JsonUtils::GetString(
+        rotor_settings_json, Constant::Config::jsbsim_state,
+        impl_.rotor_settings_.jsbsim_cmd);  // default to jsbsim-cmd if absent
   }
 
   impl_.rotor_settings_.CalcMaxThrustAndTorque();

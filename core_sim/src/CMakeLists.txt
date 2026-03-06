@@ -91,7 +91,6 @@ add_library(
     actuators/gimbal.cpp
     actuators/lift_drag_control_surface.cpp
     actuators/rotor.cpp
-    actuators/jsbsim_rotor.cpp
     actuators/wheel.cpp
     actuators/tilt.cpp
     transforms/transform_utils.cpp
