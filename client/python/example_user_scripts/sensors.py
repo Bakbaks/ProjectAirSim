@@ -7,6 +7,8 @@ Demonstrates getting data from various sensor types.
 """
 
 import asyncio
+import sys
+import time
 
 from projectairsim import Drone, ProjectAirSimClient, World
 from projectairsim.image_utils import ImageDisplay
@@ -38,6 +40,32 @@ async def demo_sensors(drone: Drone):
     drone.disarm()
 
 
+def keep_logging_sensors() -> None:
+    projectairsim_log().info("Logging sensor data continuously. Press Ctrl+C to stop.\n")
+    while True:
+        time.sleep(1.0)
+
+
+def select_scene_file() -> str:
+    scene_by_choice = {
+        "1": "scene_drone_sensors.jsonc",
+        "2": "scene_drone_sensors_jsbsim.jsonc",
+    }
+
+    if len(sys.argv) > 1:
+        selected = sys.argv[1].strip()
+        if selected in scene_by_choice:
+            return scene_by_choice[selected]
+        raise ValueError("Invalid parameter. Use 1 (fastphysics) or 2 (jsbsim).")
+
+    projectairsim_log().info("Select mode: 1=fastphysics, 2=jsbsim")
+    while True:
+        selected = input("Enter 1 or 2: ").strip()
+        if selected in scene_by_choice:
+            return scene_by_choice[selected]
+        print("Invalid option. Please enter 1 or 2.")
+
+
 if __name__ == "__main__":
     # Create a Project AirSim client
     client = ProjectAirSimClient()
@@ -49,47 +77,50 @@ if __name__ == "__main__":
         # Connect to simulation environment
         client.connect()
 
+        scene_file = select_scene_file()
+        projectairsim_log().info(f"Using scene config: {scene_file}")
+
         # Create a World object to interact with the sim world and load a scene
-        world = World(client, "scene_drone_sensors.jsonc")
+        world = World(client, scene_file)
 
         # Create a Drone object to interact with a drone in the loaded sim world
         drone = Drone(client, world, "Drone1")
 
         # Subscribe to the Drone's sensors with a callback to receive the sensor data
 
-        # Subscribe to chase camera sensor
-        chase_cam_window = "ChaseCam"
-        image_display.add_chase_cam(chase_cam_window)
-        client.subscribe(
-            drone.sensors["Chase"]["scene_camera"],
-            lambda _, chase: image_display.receive(chase, chase_cam_window),
-        )
+        # # Subscribe to chase camera sensor
+        # chase_cam_window = "ChaseCam"
+        # image_display.add_chase_cam(chase_cam_window)
+        # client.subscribe(
+        #     drone.sensors["Chase"]["scene_camera"],
+        #     lambda _, chase: image_display.receive(chase, chase_cam_window),
+        # )
 
-        # Subscribe to the Drone's RGB Camera and display the captured image
-        rgb_name = "RGB-Image"
-        image_display.add_image(rgb_name, subwin_idx=0)
-        client.subscribe(
-            drone.sensors["DownCamera"]["scene_camera"],
-            lambda _, rgb: image_display.receive(rgb, rgb_name),
-        )
+        # # Subscribe to the Drone's RGB Camera and display the captured image
+        # rgb_name = "RGB-Image"
+        # image_display.add_image(rgb_name, subwin_idx=0)
+        # client.subscribe(
+        #     drone.sensors["DownCamera"]["scene_camera"],
+        #     lambda _, rgb: image_display.receive(rgb, rgb_name),
+        # )
 
-        # Subscribe to the Drone's Depth Camera and display the captured image
-        depth_name = "Depth-Image"
-        image_display.add_image(depth_name, subwin_idx=1)
-        client.subscribe(
-            drone.sensors["DownCamera"]["depth_camera"],
-            lambda _, depth: image_display.receive(depth, depth_name),
-        )
+        # # Subscribe to the Drone's Depth Camera and display the captured image
+        # depth_name = "Depth-Image"
+        # image_display.add_image(depth_name, subwin_idx=1)
+        # client.subscribe(
+        #     drone.sensors["DownCamera"]["depth_camera"],
+        #     lambda _, depth: image_display.receive(depth, depth_name),
+        # )
 
-        # Subscribe to the Drone's Segmentation Camera and display the captured image
-        seg_name = "Seg-Image"
-        image_display.add_image(seg_name, subwin_idx=2)
-        client.subscribe(
-            drone.sensors["DownCamera"]["segmentation_camera"],
-            lambda _, seg: image_display.receive(seg, seg_name),
-        )
+        # # Subscribe to the Drone's Segmentation Camera and display the captured image
+        # seg_name = "Seg-Image"
+        # image_display.add_image(seg_name, subwin_idx=2)
+        # client.subscribe(
+        #     drone.sensors["DownCamera"]["segmentation_camera"],
+        #     lambda _, seg: image_display.receive(seg, seg_name),
+        # )
 
-        image_display.start()
+        # image_display.start()
 
         # Subscribe to the Drone's GPS sensor and print the GPS data
         client.subscribe(
@@ -129,8 +160,10 @@ if __name__ == "__main__":
             lambda _, airspeed: projectairsim_log().info(f"Airspeed: {airspeed} \n"),
         )
 
-        # Run the sensors demonstration routine
-        asyncio.run(demo_sensors(drone))
+        keep_logging_sensors()
+
+    except KeyboardInterrupt:
+        projectairsim_log().info("Stopping sensor logging...\n")
 
     except Exception as err:
         projectairsim_log().error(f"Exception occurred: {err}", exc_info=True)
