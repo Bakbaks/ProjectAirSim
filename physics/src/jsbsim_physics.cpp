@@ -327,6 +327,25 @@ Quaternion JSBSimPhysicsBody::GetModelOrientation() {
   return TransformUtils::ToQuaternion(roll, pitch, yaw);
 }
 
+namespace {
+double ReadFinitePropertyWithFallback(
+    const std::shared_ptr<JSBSim::FGFDMExec>& model,
+    const char* primary,
+    const char* secondary) {
+  const double primary_value = model->GetPropertyValue(primary);
+  if (std::isfinite(primary_value)) {
+    return primary_value;
+  }
+
+  const double secondary_value = model->GetPropertyValue(secondary);
+  if (std::isfinite(secondary_value)) {
+    return secondary_value;
+  }
+
+  return 0.0;
+}
+}
+
 Vector3 JSBSimPhysicsBody::GetModelLinearVelocity() {
   double n = model_->GetPropertyValue("velocities/v-north-fps") * MathUtils::feets_to_meters; //TODO: replace for a FeetsToMeters method
   double e = model_->GetPropertyValue("velocities/v-east-fps") * MathUtils::feets_to_meters;
@@ -343,9 +362,18 @@ Vector3 JSBSimPhysicsBody::GetModelAngularVelocity() {
 }
 
 Vector3 JSBSimPhysicsBody::GetModelLinearAcceleration() {
-  double ui = model_->GetPropertyValue("accelerations/uidot-ft_sec2") * MathUtils::feets_to_meters;
-  double vi = model_->GetPropertyValue("accelerations/vidot-ft_sec2") * MathUtils::feets_to_meters;
-  double wi = model_->GetPropertyValue("accelerations/widot-ft_sec2") * MathUtils::feets_to_meters;
+  double ui = ReadFinitePropertyWithFallback(
+                  model_, "accelerations/udot-ft_sec2",
+                  "accelerations/uidot-ft_sec2") *
+              MathUtils::feets_to_meters;
+  double vi = ReadFinitePropertyWithFallback(
+                  model_, "accelerations/vdot-ft_sec2",
+                  "accelerations/vidot-ft_sec2") *
+              MathUtils::feets_to_meters;
+  double wi = ReadFinitePropertyWithFallback(
+                  model_, "accelerations/wdot-ft_sec2",
+                  "accelerations/widot-ft_sec2") *
+              MathUtils::feets_to_meters;
   return Vector3(ui, vi, wi);
 }
 
