@@ -21,7 +21,7 @@ Ethernet adapter vEthernet (WSL):
 Beginning with this [PX4 change request](https://github.com/PX4/PX4-Autopilot/commit/1719ff9892f3c3d034f2b44e94d15527ab09cec6) (which correlates to version v1.12.0-beta1 or newer) PX4 in SITL mode can now connect to Project AirSim at a remote IP address.  To use this feature, make sure you have a version of PX4 containing this fix and set the following environment variable in the WSL 2 Linux instance running  PX4:
 
 ```bash
-export PX4_SIM_HOST_ADDR=www.xxx.yyy.zzz
+export PX4_SIM_HOST_ADDR=192.168.100.9
 ```
 
 **Note:** Be sure to change `www.xxx.yyy.zzz` to match the IP address reported by the `ipconfig` command.

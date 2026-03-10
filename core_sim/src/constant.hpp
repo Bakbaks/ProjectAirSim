@@ -427,6 +427,8 @@ class Constant {
     static constexpr const char* propeller_height = "propeller-height";
     static constexpr const char* smoothing_tc = "smoothing-tc";
     static constexpr const char* rotor_settings = "rotor-settings";
+    static constexpr const char* jsbsim_cmd = "jsbsim-cmd";
+    static constexpr const char* jsbsim_state = "jsbsim-state";
     static constexpr const char* wheel_settings = "wheel-settings";
     static constexpr const char* steering_connected = "steering-connected";
     static constexpr const char* first_order_filter_tc =

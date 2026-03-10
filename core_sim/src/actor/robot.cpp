@@ -142,8 +142,8 @@ class Robot::Impl : public ActorImpl {
 
   const PhysicsType& GetPhysicsType() const;
   void SetPhysicsType(const PhysicsType& phys_type);
-  // used only by JSBSim physics and controller
-  std::shared_ptr<JSBSim::FGFDMExec> GetJSBSimModel() const;
+  //used only by JSBSim physics and controller
+  std::shared_ptr<::JSBSim::FGFDMExec> GetJSBSimModel() const;
   const std::string& GetPhysicsConnectionSettings() const;
   void SetPhysicsConnectionSettings(const std::string& phys_conn_settings);
   const std::string& GetControlConnectionSettings() const;
@@ -197,7 +197,7 @@ class Robot::Impl : public ActorImpl {
   PhysicsType physics_type_;
   std::string jsbsim_script_;
   std::string jsbsim_model_;
-  std::shared_ptr<JSBSim::FGFDMExec> model_;
+  std::shared_ptr<::JSBSim::FGFDMExec> model_;
   std::string physics_connection_settings_;
   std::string control_connection_settings_;
   bool start_landed_;
@@ -404,7 +404,7 @@ void Robot::SetPhysicsType(const PhysicsType& phys_type) {
   static_cast<Robot::Impl*>(pimpl_.get())->SetPhysicsType(phys_type);
 }
 
-std::shared_ptr<JSBSim::FGFDMExec> Robot::GetJSBSimModel() const {
+std::shared_ptr<::JSBSim::FGFDMExec> Robot::GetJSBSimModel() const {
   return static_cast<Robot::Impl*>(pimpl_.get())->GetJSBSimModel();
 }
 
@@ -551,12 +551,22 @@ void Robot::Impl::Load(ConfigJson config_json) {
   // should have been set during robot construction in the scene).
   UpdateEnvironment();
 
-  //! Initialize Sensors
+  // Initialize Sensors
   InitializeSensors(GetKinematics(), GetEnvironment());
 
   // check if using jsbsim physics to initialize jsbsim
   if (physics_type_ == PhysicsType::kJSBSimPhysics) {
     InitializeJSBSimModel();
+
+    // Wire JSBSim model to rotor actuators that have jsbsim-cmd configured
+    for (auto& actuator : actuators_) {
+      if (actuator->GetType() == ActuatorType::kRotor) {
+        auto& rotor = static_cast<Rotor&>(*actuator);
+        if (!rotor.GetRotorSettings().jsbsim_cmd.empty()) {
+          rotor.SetJSBSimModel(model_);
+        }
+      }
+    }
   }
 
   // Create tilt actuator target list
@@ -765,8 +775,8 @@ void Robot::Impl::RegisterServiceMethods() {
   service_manager_.RegisterMethod(get_camera_ray, get_camera_ray_handler);
 }
 
-void Robot::Impl::InitializeJSBSimModel() {
-  model_ = std::make_shared<JSBSim::FGFDMExec>();
+void Robot::Impl::InitializeJSBSimModel(){
+  model_ = std::make_shared<::JSBSim::FGFDMExec>();
   std::string jsbsim_root_path =
       working_simulation_path_ + "/SimLibs/core_sim/jsbsim/models/";
   model_->SetRootDir(SGPath(jsbsim_root_path));
@@ -1039,9 +1049,7 @@ const std::string& Robot::Impl::GetJSBSimScript() const {
   return jsbsim_script_;
 }
 
-std::shared_ptr<JSBSim::FGFDMExec> Robot::Impl::GetJSBSimModel() const {
-  return model_;
-}
+std::shared_ptr<::JSBSim::FGFDMExec> Robot::Impl::GetJSBSimModel() const { return model_; }
 
 const std::string& Robot::Impl::GetPhysicsConnectionSettings() const {
   return physics_connection_settings_;
