@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <system_error>
 #include <thread>
@@ -125,6 +126,39 @@ class SteppableClock : public ClockBase {
 };
 
 // -----------------------------------------------------------------------------
+// UnrealDrivenClock
+
+class UnrealDrivenClock : public ClockBase {
+ public:
+  static constexpr TimeNano kMinStepNanos = 1;
+
+  explicit UnrealDrivenClock(
+      TimeNano fixed_step_nanos = ClockBase::kDefaultStepNanos,
+      TimeNano start = 0);
+  ~UnrealDrivenClock() override;
+
+  TimeNano NowSimNanos() const override;
+
+  // Called from the Unreal loop to add real frame time to the accumulator.
+  void BeginFrame(TimeNano delta_nanos);
+  void BeginFrame(TimeSec delta_seconds);
+
+  // True when enough accumulated real time exists for at least one sim step.
+  bool HasPendingStep() const;
+
+  void SetFixedStep(TimeNano fixed_step_nanos);
+  TimeNano GetRemainderNanos() const;
+
+ protected:
+  void Step() override;
+
+ private:
+  std::atomic<TimeNano> current_sim_time_;
+  std::atomic<TimeNano> fixed_step_nanos_;
+  std::atomic<TimeNano> accumulated_nanos_;
+};
+
+// -----------------------------------------------------------------------------
 // SimClock
 
 class SimClock {  // TODO Avoid factory singleton pattern?
@@ -144,7 +178,7 @@ class SimClock {  // TODO Avoid factory singleton pattern?
 // -----------------------------------------------------------------------------
 // Clock Settings
 
-enum class ClockType { kSteppable = 0, kRealTime = 1 };
+enum class ClockType { kSteppable = 0, kRealTime = 1, kUnrealDriven = 2 };
 
 struct ClockSettings {
   ClockType type = ClockType::kSteppable;

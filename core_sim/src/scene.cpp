@@ -322,6 +322,8 @@ const ClockSettings& Scene::GetClockSettings() const {
   return pimpl_->GetClockSettings();
 }
 
+bool Scene::ExternalTick() { return pimpl_->SceneTick(); }
+
 const SegmentationSettings& Scene::GetSegmentationSettings() const {
   return pimpl_->GetSegmentationSettings();
 }
@@ -583,11 +585,16 @@ void Scene::Impl::StartSceneTick() {
     start_physics_func();
   }
 
+  sim_time_ = SimClock::Get()->NowSimNanos();
+
+  // Unreal-driven clock mode runs SceneTick() from Unreal's Tick loop.
+  if (clock_settings_.type == ClockType::kUnrealDriven) {
+    return;
+  }
+
   // Bind callback with implicit argument "this"
   executor_.Initialize(std::bind(&Scene::Impl::SceneTick, this),
                        clock_settings_.scene_tick_period);
-
-  sim_time_ = SimClock::Get()->NowSimNanos();
   executor_.Start();
 }
 
@@ -601,7 +608,9 @@ void Scene::Impl::StopSceneTick() {
     stop_physics_func();
   }
 
-  executor_.Stop();
+  if (clock_settings_.type != ClockType::kUnrealDriven) {
+    executor_.Stop();
+  }
 }
 
 void Scene::Impl::OnBeginUpdate() {
@@ -642,6 +651,8 @@ std::string Scene::Impl::SimGetClockType() {
       return Constant::Config::steppable;
     case ClockType::kRealTime:
       return Constant::Config::real_time;
+    case ClockType::kUnrealDriven:
+      return Constant::Config::unreal_driven;
     default:
       return "unknown";
   }
@@ -1067,6 +1078,9 @@ void Scene::Loader::LoadSceneWithJSON(const json& json) {
     if (impl_.clock_settings_.pause_on_start) {
       SimClock::Get()->SimPause(true);
     }
+  } else if (impl_.clock_settings_.type == ClockType::kUnrealDriven) {
+    SimClock::Get(
+        std::make_shared<UnrealDrivenClock>(impl_.clock_settings_.step));
   } else {
     // Default to steppable clock
     SimClock::Get(std::make_shared<SteppableClock>());
@@ -1187,6 +1201,8 @@ void Scene::Loader::LoadClockSettings(const json& json) {
       impl_.clock_settings_.type = ClockType::kSteppable;
     } else if (clock_type == Constant::Config::real_time) {
       impl_.clock_settings_.type = ClockType::kRealTime;
+    } else if (clock_type == Constant::Config::unreal_driven) {
+      impl_.clock_settings_.type = ClockType::kUnrealDriven;
     } else {
       impl_.logger_.LogWarning(
           impl_.name_,

@@ -22,7 +22,6 @@
 #include "UnrealLogger.h"
 #include "World/WeatherLib.h"
 #include "core_sim/clock.hpp"
-#include "Sensors/UnrealCamera.h"
 
 namespace projectairsim = microsoft::projectairsim;
 
@@ -286,17 +285,35 @@ void AUnrealScene::BeginPlay() {
   Super::BeginPlay();
   unreal_time = 0;
 
+  // Use static_cast instead of dynamic_cast since RTTI is disabled (/GR-)
+  // in Unreal Engine builds. Determine the type from clock settings instead.
+  if (sim_scene &&
+      sim_scene->GetClockSettings().type ==
+          projectairsim::ClockType::kUnrealDriven) {
+    unreal_driven_clock_ = static_cast<projectairsim::UnrealDrivenClock*>(
+        projectairsim::SimClock::Get());
+  } else {
+    unreal_driven_clock_ = nullptr;
+  }
+  using_unreal_driven_clock = unreal_driven_clock_ != nullptr;
+
   // Set up Unreal loop timing
-  if (sim_scene && sim_scene->GetClockSettings().type ==
-                       projectairsim::ClockType::kSteppable) {
-    // For steppable clock, synchronize Unreal's DeltaTime to sim clock's step
+  if (sim_scene &&
+      (sim_scene->GetClockSettings().type ==
+           projectairsim::ClockType::kSteppable ||
+       sim_scene->GetClockSettings().type ==
+           projectairsim::ClockType::kUnrealDriven)) {
+    // For steppable and Unreal-driven clocks, synchronize Unreal's DeltaTime
+    // to the configured simulation step.
     double sim_step_sec = sim_scene->GetClockSettings().step / 1.0e9;
     FApp::SetFixedDeltaTime(sim_step_sec);  // persists in UE project
 
     if (using_unreal_physics) {
       // If scene has any robots with Unreal Physics, steppable sim clock must
       // follow Unreal's DeltaTime by external step calls
-      projectairsim::SimClock::Get()->SetExternallySteppedOnly(true);
+      if (!using_unreal_driven_clock) {
+        projectairsim::SimClock::Get()->SetExternallySteppedOnly(true);
+      }
 
       // TODO Uncommenting the below will set Unreal to do sequential ticks as
       // fast as possible without sleeps to synchronize to real time execution
@@ -411,7 +428,21 @@ void AUnrealScene::Tick(float DeltaTime) {
   bool is_unreal_paused = UGameplayStatics::IsGamePaused(unreal_world);
   bool is_simclock_paused = projectairsim::SimClock::Get()->IsPaused();
 
-  if (using_unreal_physics) {
+  if (using_unreal_driven_clock && unreal_driven_clock_ != nullptr) {
+    if (!is_unreal_paused) {
+      unreal_driven_clock_->BeginFrame(UnrealHelpers::DeltaTimeToNanos(DeltaTime));
+
+      while (unreal_driven_clock_->HasPendingStep()) {
+        if (!sim_scene->ExternalTick()) {
+          UnrealLogger::Log(
+              projectairsim::LogLevel::kWarning,
+              TEXT("[UnrealScene] Unreal-driven external scene tick failed."));
+          break;
+        }
+      }
+    }
+    cur_sim_time = projectairsim::SimClock::Get()->NowSimNanos();
+  } else if (using_unreal_physics) {
     //-------------------------------------------------------------------------
     // UnrealPhysics
 
@@ -610,6 +641,7 @@ bool AUnrealScene::GetSimBoundingBox3D(
 
 nlohmann::json AUnrealScene::Get3DBoundingBoxServiceMethod(
     const std::string& object_name, int box_alignment) {
+  FRotator BoxRotation;
   FOrientedBox OrientedBox;
   projectairsim::BBox3D OutBBox;
   auto BoxAlignment =
