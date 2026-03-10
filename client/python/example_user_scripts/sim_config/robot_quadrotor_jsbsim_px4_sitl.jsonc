@@ -253,7 +253,11 @@
         "coeff-of-torque": 0.040164,
         "max-rpm": 6396.667,
         "propeller-diameter": 0.2286,
-        "smoothing-tc": 0.005
+        "smoothing-tc": 0.005,
+        // JSBSim bridge: write control signal to ESC command input
+        "jsbsim-cmd": "fcs/esc-cmd-norm[3]",
+        // JSBSim bridge: read actuator state (same as cmd since model has no separate output)
+        "jsbsim-state": "fcs/esc-out[3]"
       }
     },
     {
@@ -273,7 +277,9 @@
         "coeff-of-torque": 0.040164,
         "max-rpm": 6396.667,
         "propeller-diameter": 0.2286,
-        "smoothing-tc": 0.005
+        "smoothing-tc": 0.005,
+        "jsbsim-cmd": "fcs/esc-cmd-norm[1]",
+        "jsbsim-state": "fcs/esc-out[1]"
       }
     },
     {
@@ -293,7 +299,9 @@
         "coeff-of-torque": 0.040164,
         "max-rpm": 6396.667,
         "propeller-diameter": 0.2286,
-        "smoothing-tc": 0.005
+        "smoothing-tc": 0.005,
+        "jsbsim-cmd": "fcs/esc-cmd-norm[0]",
+        "jsbsim-state": "fcs/esc-out[0]"
       }
     },
     {
@@ -313,7 +321,9 @@
         "coeff-of-torque": 0.040164,
         "max-rpm": 6396.667,
         "propeller-diameter": 0.2286,
-        "smoothing-tc": 0.005
+        "smoothing-tc": 0.005,
+        "jsbsim-cmd": "fcs/esc-cmd-norm[2]",
+        "jsbsim-state": "fcs/esc-out[2]"
       }
     }
   ],
