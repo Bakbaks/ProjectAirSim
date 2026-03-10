@@ -9,6 +9,7 @@ Demonstrates getting data from various sensor types.
 import asyncio
 import sys
 import time
+from typing import Tuple
 
 from projectairsim import Drone, ProjectAirSimClient, World
 from projectairsim.image_utils import ImageDisplay
@@ -40,30 +41,44 @@ async def demo_sensors(drone: Drone):
     drone.disarm()
 
 
+async def px4_arm_and_takeoff(drone: Drone):
+    projectairsim_log().info("PX4 mode: enable_api_control")
+    drone.enable_api_control()
+    projectairsim_log().info("PX4 mode: arm")
+    drone.arm()
+    takeoff_task = await drone.takeoff_async()
+    projectairsim_log().info("PX4 mode: takeoff_async invoked")
+    await takeoff_task
+    projectairsim_log().info("PX4 mode: takeoff_async completed")
+
+
 def keep_logging_sensors() -> None:
     projectairsim_log().info("Logging sensor data continuously. Press Ctrl+C to stop.\n")
     while True:
         time.sleep(1.0)
 
 
-def select_scene_file() -> str:
+def select_scene_file() -> Tuple[str, str]:
     scene_by_choice = {
-        "1": "scene_drone_sensors.jsonc",
-        "2": "scene_drone_sensors_jsbsim.jsonc",
+        "1": ("scene_drone_sensors.jsonc", "fastphysics"),
+        "2": ("scene_drone_sensors_jsbsim.jsonc", "jsbsim"),
+        "3": ("scene_drone_sensors_jsbsim_px4_sitl.jsonc", "jsbsim-px4"),
     }
 
     if len(sys.argv) > 1:
         selected = sys.argv[1].strip()
         if selected in scene_by_choice:
             return scene_by_choice[selected]
-        raise ValueError("Invalid parameter. Use 1 (fastphysics) or 2 (jsbsim).")
+        raise ValueError(
+            "Invalid parameter. Use 1 (fastphysics), 2 (jsbsim), or 3 (jsbsim-px4)."
+        )
 
-    projectairsim_log().info("Select mode: 1=fastphysics, 2=jsbsim")
+    projectairsim_log().info("Select mode: 1=fastphysics, 2=jsbsim, 3=jsbsim-px4")
     while True:
-        selected = input("Enter 1 or 2: ").strip()
+        selected = input("Enter 1, 2 or 3: ").strip()
         if selected in scene_by_choice:
             return scene_by_choice[selected]
-        print("Invalid option. Please enter 1 or 2.")
+        print("Invalid option. Please enter 1, 2 or 3.")
 
 
 if __name__ == "__main__":
@@ -77,11 +92,12 @@ if __name__ == "__main__":
         # Connect to simulation environment
         client.connect()
 
-        scene_file = select_scene_file()
-        projectairsim_log().info(f"Using scene config: {scene_file}")
+        scene_file, mode_name = select_scene_file()
+        projectairsim_log().info(f"Using mode '{mode_name}' with scene config: {scene_file}")
 
         # Create a World object to interact with the sim world and load a scene
-        world = World(client, scene_file)
+        delay_after_load_sec = 2 if mode_name == "jsbsim-px4" else 0
+        world = World(client, scene_file, delay_after_load_sec=delay_after_load_sec)
 
         # Create a Drone object to interact with a drone in the loaded sim world
         drone = Drone(client, world, "Drone1")
@@ -159,6 +175,9 @@ if __name__ == "__main__":
             drone.sensors["Airspeed"]["airspeed"],
             lambda _, airspeed: projectairsim_log().info(f"Airspeed: {airspeed} \n"),
         )
+
+        if mode_name == "jsbsim-px4":
+            asyncio.run(px4_arm_and_takeoff(drone))
 
         keep_logging_sensors()
 
