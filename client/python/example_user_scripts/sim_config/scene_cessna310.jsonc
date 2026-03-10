@@ -5,7 +5,7 @@
       "type": "robot",
       "name": "c310",
       "origin": {
-        "xyz": "3 -2 -5",
+        "xyz": "3 -2 -10",
         "rpy": "0 0 0"
       },
       "robot-config": "robot_cessna310.jsonc"

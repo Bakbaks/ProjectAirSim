@@ -133,8 +133,8 @@ async def main():
         # ------------------------------------------------------------------------------
 
         # Shut down the drone
-        drone.disarm()
-        drone.disable_api_control()
+        # drone.disarm()
+        # drone.disable_api_control()
 
     # logs exception on the console
     except Exception as err:
