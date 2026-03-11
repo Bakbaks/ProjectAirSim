@@ -8,7 +8,7 @@
         "xyz": "0.0 0.0 -6.0",
         "rpy-deg": "0 0 0"
       },
-      "robot-config": "robot_quadrotor_x_jsbsim_simpleflight.jsonc"
+      "robot-config": "robot_quadrotor_x_jsbsim_px4_sitl.jsonc"
     }
   ],
   "clock": {
