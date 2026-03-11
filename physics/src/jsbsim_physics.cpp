@@ -20,6 +20,9 @@
 #include "initialization/FGTrim.h"
 #include "FGFDMExec.h" // JSBSim
 #include "models/FGInertial.h"
+#include "models/FGAuxiliary.h"
+#include "models/FGPropagate.h"
+#include "models/FGAccelerations.h"
 
 
 
@@ -87,7 +90,7 @@ void JSBSimPhysicsBody::InitializeJSBSimPhysicsBody(
   is_grounded_ = sim_robot_.GetStartLanded();
   
   model_ = sim_robot_.GetJSBSimModel();
-  model_->SetPropertyValue("simulation/dt", 0.008333333333); //TODO: use configuration instead of harcoded value
+  model_->Setdt(0.008333333333); //TODO: use configuration instead of harcoded value
 
   // get difference betweeen JSBSim's initial geopoint position and home geopoint position
   const auto& world_geopoint = sim_robot_.GetEnvironment().home_geo_point.geo_point;
@@ -174,12 +177,12 @@ void JSBSimPhysicsBody::InitializeJSBSim(){
 }
 
 void JSBSimPhysicsBody::SetJSBSimAltitudeGrounded(float delta_altitude){
-  //model_->SetPropertyValue("position/h-sl-meters", -position[2]);
-  auto terrain_elevation_val = model_->GetPropertyValue("position/terrain-elevation-asl-ft") + delta_altitude * MathUtils::meters_to_feets;
-  model_->SetPropertyValue("position/terrain-elevation-asl-ft", terrain_elevation_val);
-  auto altitude = model_->GetPropertyValue("position/h-sl-meters");
+  auto* propagate = model_->GetPropagate();
+  auto terrain_elevation_val = propagate->GetTerrainElevation() + delta_altitude * MathUtils::meters_to_feets;
+  propagate->SetTerrainElevation(terrain_elevation_val);
+  auto altitude = propagate->GetAltitudeASLmeters();
   auto new_altitude = altitude + delta_altitude;
-  model_->SetPropertyValue("position/h-sl-meters", new_altitude);
+  propagate->SetAltitudeASLmeters(new_altitude);
 }
 
 // TODO Rename this to "SetActuationOutputs"?
@@ -294,94 +297,89 @@ void JSBSimPhysicsModel::StepPhysicsBody(TimeNano dt_nanos,
 
 Vector3 JSBSimPhysicsBody::GetModelCoordinates(){ //TODO: use GeoPoint instead of Vector3
 //Get JSBSim geopoint
-  auto lat_deg = model_->GetPropertyValue("position/lat-gc-deg");
-  auto lon_deg = model_->GetPropertyValue("position/long-gc-deg");
-  auto alt_mt = model_->GetPropertyValue("position/h-sl-meters");
+  auto* propagate = model_->GetPropagate();
+  auto lat_deg = propagate->GetLocation().GetLatitudeDeg();
+  auto lon_deg = propagate->GetLocation().GetLongitudeDeg();
+  auto alt_mt = propagate->GetAltitudeASLmeters();
   return Vector3(lat_deg, lon_deg, alt_mt);
 }
 
 Vector3 JSBSimPhysicsBody::GetModelPosition() {
+  auto* propagate = model_->GetPropagate();
+  auto* aux = model_->GetAuxiliary();
   //get latitude displacement
-  auto delta_lat = model_->GetPropertyValue("position/lat-gc-deg") -
+  auto delta_lat = propagate->GetLocation().GetLatitudeDeg() -
           home_geopoint_[0];
   //get latitude in meters
   double n = std::copysign(
-      model_->GetPropertyValue("position/distance-from-start-lat-mt"),
+      aux->GetLatitudeRelativePosition(),
       delta_lat);
   // get longitud displacement
-  auto delta_lon = model_->GetPropertyValue("position/long-gc-deg") -
+  auto delta_lon = propagate->GetLocation().GetLongitudeDeg() -
           home_geopoint_[1];
   //get longitud in meters
   double e = std::copysign(
-      model_->GetPropertyValue("position/distance-from-start-lon-mt"),
+      aux->GetLongitudeRelativePosition(),
       delta_lon);
   double d =
-      -(model_->GetPropertyValue("position/h-sl-meters") - home_geopoint_[2]);
+      -(propagate->GetAltitudeASLmeters() - home_geopoint_[2]);
   return Vector3(n, e, d);
 }
 
 Quaternion JSBSimPhysicsBody::GetModelOrientation() {
-  double roll = model_->GetPropertyValue("attitude/roll-rad");
-  double pitch = model_->GetPropertyValue("attitude/pitch-rad");
-  double yaw = MathUtils::deg2Rad(model_->GetPropertyValue("attitude/psi-deg"));
+  auto* propagate = model_->GetPropagate();
+  double roll = propagate->GetEuler(1);
+  double pitch = propagate->GetEuler(2);
+  double yaw = propagate->GetEuler(3);
   return TransformUtils::ToQuaternion(roll, pitch, yaw);
 }
 
-namespace {
-double ReadFinitePropertyWithFallback(
-    const std::shared_ptr<JSBSim::FGFDMExec>& model,
-    const char* primary,
-    const char* secondary) {
-  const double primary_value = model->GetPropertyValue(primary);
-  if (std::isfinite(primary_value)) {
-    return primary_value;
-  }
-
-  const double secondary_value = model->GetPropertyValue(secondary);
-  if (std::isfinite(secondary_value)) {
-    return secondary_value;
-  }
-
-  return 0.0;
-}
-}
-
 Vector3 JSBSimPhysicsBody::GetModelLinearVelocity() {
-  double n = model_->GetPropertyValue("velocities/v-north-fps") * MathUtils::feets_to_meters; //TODO: replace for a FeetsToMeters method
-  double e = model_->GetPropertyValue("velocities/v-east-fps") * MathUtils::feets_to_meters;
-  double d = model_->GetPropertyValue("velocities/v-down-fps") * MathUtils::feets_to_meters;
+  auto* propagate = model_->GetPropagate();
+  double n = propagate->GetVel(1) * MathUtils::feets_to_meters; //TODO: replace for a FeetsToMeters method
+  double e = propagate->GetVel(2) * MathUtils::feets_to_meters;
+  double d = propagate->GetVel(3) * MathUtils::feets_to_meters;
   return Vector3(n, e, d);
 }
 
 //Body Frame
 Vector3 JSBSimPhysicsBody::GetModelAngularVelocity() {
-  double p = model_->GetPropertyValue("velocities/p-rad_sec");
-  double q = model_->GetPropertyValue("velocities/q-rad_sec");
-  double r = model_->GetPropertyValue("velocities/r-rad_sec");
+  auto* propagate = model_->GetPropagate();
+  double p = propagate->GetPQR(1);
+  double q = propagate->GetPQR(2);
+  double r = propagate->GetPQR(3);
   return Vector3(p, q, r);
 }
 
+// Returns linear acceleration in world frame (NED).
+// JSBSim only exposes body-frame accelerations (udot, vdot, wdot),
+// so we read them and rotate to world frame via Tb2l = body-to-NED transform,
+// matching the convention used by fast_physics (accels.linear in world frame).
 Vector3 JSBSimPhysicsBody::GetModelLinearAcceleration() {
-  double ui = ReadFinitePropertyWithFallback(
-                  model_, "accelerations/udot-ft_sec2",
-                  "accelerations/uidot-ft_sec2") *
-              MathUtils::feets_to_meters;
-  double vi = ReadFinitePropertyWithFallback(
-                  model_, "accelerations/vdot-ft_sec2",
-                  "accelerations/vidot-ft_sec2") *
-              MathUtils::feets_to_meters;
-  double wi = ReadFinitePropertyWithFallback(
-                  model_, "accelerations/wdot-ft_sec2",
-                  "accelerations/widot-ft_sec2") *
-              MathUtils::feets_to_meters;
-  return Vector3(ui, vi, wi);
+  auto* accel = model_->GetAccelerations();
+  
+  // Read body-frame linear accelerations from JSBSim and convert ft/s² -> m/s²
+  double u_body = accel->GetUVWdot(1);
+  if (!std::isfinite(u_body)) u_body = accel->GetUVWdot(1); // fallback if needed, or simply let it pass
+  u_body *= MathUtils::feets_to_meters;
+
+  double v_body = accel->GetUVWdot(2) * MathUtils::feets_to_meters;
+  double w_body = accel->GetUVWdot(3) * MathUtils::feets_to_meters;
+
+  const Vector3 accel_body(u_body, v_body, w_body);
+
+  // Transform body-frame acceleration to world frame (NED) using current
+  // orientation: a_world = q * a_body (equivalent to JSBSim's Tb2l * UVWdot)
+  const Quaternion orientation = GetModelOrientation();
+  return PhysicsUtils::TransformVectorToWorldFrame(accel_body, orientation);
 }
 
 //Body Frame
 Vector3 JSBSimPhysicsBody::GetModelAngularAcceleration() {
-  double pdot = model_->GetPropertyValue("accelerations/pdot-rad_sec2");
-  double qdot = model_->GetPropertyValue("accelerations/qdot-rad_sec2");
-  double rdot = model_->GetPropertyValue("accelerations/rdot-rad_sec2");
+  auto* accel = model_->GetAccelerations();
+  double pdot = accel->GetPQRdot(1);
+  double qdot = accel->GetPQRdot(2);
+  double rdot = accel->GetPQRdot(3);
   return Vector3(pdot, qdot, rdot);
 }
 
@@ -406,7 +404,7 @@ Kinematics JSBSimPhysicsModel::CalcNextKinematicsNoCollision(
 
   residual_time_ += dt_sec;
   // get jsbsim dt
-  double jsbsim_dt = fp_body->model_->GetPropertyValue("simulation/dt");
+  double jsbsim_dt = fp_body->model_->GetDeltaT();
 
   // Run JSBSim for the residual time
   while (residual_time_ >= jsbsim_dt) {
