@@ -8,6 +8,7 @@ Demonstrates getting data from various sensor types.
 
 import asyncio
 import sys
+import os
 import time
 from typing import Tuple
 
@@ -95,9 +96,23 @@ if __name__ == "__main__":
         scene_file, mode_name = select_scene_file()
         projectairsim_log().info(f"Using mode '{mode_name}' with scene config: {scene_file}")
 
-        # Create a World object to interact with the sim world and load a scene
+        # choose sim_config_path based on selected mode; jsbsim scenes live under a subfolder
+        # default path used by the World class is "sim_config/", which works for the
+        # non-jsbsim example.  For JSBSim-based examples the configs were recently
+        # moved into `jsbsim/sim_config` so we override the path accordingly.
         delay_after_load_sec = 2 if mode_name == "jsbsim-px4" else 0
-        world = World(client, scene_file, delay_after_load_sec=delay_after_load_sec)
+        if "jsbsim" in mode_name:
+            sim_config_path = os.path.join("jsbsim", "sim_config") + os.sep
+        else:
+            sim_config_path = "sim_config/"
+
+        # Create a World object to interact with the sim world and load a scene
+        world = World(
+            client,
+            scene_file,
+            delay_after_load_sec=delay_after_load_sec,
+            sim_config_path=sim_config_path,
+        )
 
         # Create a Drone object to interact with a drone in the loaded sim world
         drone = Drone(client, world, "Drone1")

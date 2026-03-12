@@ -321,21 +321,40 @@ void Rotor::Impl::UpdateActuatorOutput(std::vector<float> && control_signals,
   // This actuator uses one control signal
   auto control_signal = control_signals[0];
 
-  // If JSBSim bridge is configured, write control signal to JSBSim property
+  // Determine which signal value to use for physics computation.  If the JSBSim
+  // bridge is configured, forward the control signal to JSBSim and then read
+  // back the state property (which in our models is typically just the output
+  // of the ESC actuator).  In that case we still need to run the same internal
+  // math below so that the rotor angle/speed are updated and visuals spin.  We
+  // do *not* early-return as was previously written, which effectively left
+  // all rotors frozen at zero speed whenever JSBSim was active.
+  float control_signal_filtered = 0.0f;
+  TimeSec dt_sec = sim_dt_nanos / 1.0e9;
+
   if (!rotor_settings_.jsbsim_cmd.empty() && jsbsim_model_ != nullptr) {
+    // send throttle command to JSBSim
     jsbsim_model_->SetPropertyValue(
         rotor_settings_.jsbsim_cmd,
         static_cast<double>(std::clamp(control_signal, 0.0f, 1.0f)));
-    return;  // Skip the rest of the update since JSBSim will be controlling the rotor and providing feedback through GetJSBSimState()
-  }
 
-  // Apply first order filter to simulate actuator hardware dynamics
-  TimeSec dt_sec = sim_dt_nanos / 1.0e9;
-  first_order_filter_.SetInput(std::clamp(control_signal, 0.0f, 1.0f));
-  first_order_filter_.UpdateOutput(dt_sec);  // do filtering
-  auto control_signal_input = first_order_filter_.GetInput();
-  auto control_signal_filtered = first_order_filter_.GetOutput();
-  // TODO Clamp filtered output to same range as input?
+    // read back state value; default to cmd if nothing configured
+    float state = GetJSBSimState();
+    // state is expected in [0,1]; if it is negative we fall back to raw command
+    if (state < 0.0f) {
+      state = std::clamp(control_signal, 0.0f, 1.0f);
+    }
+    // we deliberately bypass the first-order filter in JSBSim case because the
+    // dynamics are handled by the flight model itself.  However the existing
+    // filter object is still left in case the config changes mid-flight.
+    control_signal_filtered = state;
+  } else {
+    // Apply first order filter to simulate actuator hardware dynamics
+    first_order_filter_.SetInput(std::clamp(control_signal, 0.0f, 1.0f));
+    first_order_filter_.UpdateOutput(dt_sec);  // do filtering
+    auto control_signal_input = first_order_filter_.GetInput();
+    control_signal_filtered = first_order_filter_.GetOutput();
+    // TODO Clamp filtered output to same range as input?
+  }
 
   // Note: rotating_speed_ is set by max_speed_square because
   // control_signal_filtered is proportional to rotor thrust, and thrust is
