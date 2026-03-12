@@ -1,5 +1,5 @@
 {
-  "$schema":"../../projectairsim/src/projectairsim/schema/robot_config_schema.jsonc",
+  "$schema":"../../../projectairsim/src/projectairsim/schema/robot_config_schema.jsonc",
   "physics-type": "jsbsim-physics",
   "jsbsim-model": "quadrotor_x",
   "links": [
