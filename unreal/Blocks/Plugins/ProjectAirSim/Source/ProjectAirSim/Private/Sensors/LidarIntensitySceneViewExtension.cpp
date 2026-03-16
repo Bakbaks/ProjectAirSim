@@ -269,21 +269,22 @@ void FLidarIntensitySceneViewExtension::PrePostProcessPass_RenderThread(
       }
   }
 
-  // Create buffers for CURRENT frame
-  TArray<float> InitialData;
-  InitialData.SetNumZeroed(NumPoints * 4);
-  FRDGBufferRef PointCloudBufferRDG =
-      CreateStructuredBuffer(GraphBuilder,
-                             TEXT("FLidarPointCloudCS_PointCloudBuffer"),
-                             sizeof(float), NumPoints * 4, nullptr,
-                             BufferSize);
+  // Guard: nothing to dispatch if NumPoints is zero.
+  if (NumPoints == 0) {
+    return;
+  }
 
-      CreateStructuredBuffer(GraphBuilder, 
-                             TEXT("FLidarPointCloudCS_PointCloudBuffer_StructuredBuffer"),
-                             sizeof(float),
-                             NumPoints * 4, InitialData.GetData(), BufferSize);
-  FRDGBufferUAVRef PointCloudBufferUAV = GraphBuilder.CreateUAV(
-      PointCloudBufferRDG, PF_FloatRGBA, ERDGUnorderedAccessViewFlags::None);
+  // Create an RDG structured buffer for the compute shader output.
+  // We do NOT upload initial data here (no nullptr crash); the shader writes
+  // every slot, and AddClearUAVFloatPass zeroes any slots it misses.
+  FRDGBufferRef PointCloudBufferRDG =
+      GraphBuilder.CreateBuffer(
+          FRDGBufferDesc::CreateStructuredDesc(sizeof(float), NumPoints * 4),
+          TEXT("FLidarPointCloudCS_PointCloudBuffer"));
+
+  // Structured UAV — no pixel format; must match RWStructuredBuffer<float> in HLSL.
+  FRDGBufferUAVRef PointCloudBufferUAV = GraphBuilder.CreateUAV(PointCloudBufferRDG);
+  AddClearUAVFloatPass(GraphBuilder, PointCloudBufferUAV, -1.0f);
 
   FLidarPointCloudCS::FParameters* PassParameters =
       GraphBuilder.AllocParameters<FLidarPointCloudCS::FParameters>();
