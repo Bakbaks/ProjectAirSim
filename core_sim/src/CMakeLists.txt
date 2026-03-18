@@ -116,6 +116,7 @@ endif()
 # Set up nng and openssl for linking
 target_link_directories(${TARGET_NAME} PRIVATE ${NNG_LIB_DIR})
 target_compile_definitions(${TARGET_NAME} PRIVATE NNG_STATIC_LIB=ON)
+target_compile_definitions(${TARGET_NAME} PRIVATE PROJECTAIRSIM_BUILD_COMMIT_HASH="${PROJECTAIRSIM_BUILD_COMMIT_HASH}")
 
 target_include_directories(${TARGET_NAME} PRIVATE "${ONNXRUNTIME_ROOTDIR}/include")
 target_link_directories(${TARGET_NAME} PRIVATE "${ONNXRUNTIME_ROOTDIR}/lib")
@@ -163,6 +164,7 @@ add_custom_command(TARGET ${TARGET_NAME}
     COMMAND ${CMAKE_COMMAND} -E echo "Packaging [${TARGET_NAME}] build outputs to ${UE_PLUGIN_SIMLIBS_DIR}/${TARGET_NAME}/$<IF:$<CONFIG:Release>,Release,Debug>"
     COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:${TARGET_NAME}> ${UE_PLUGIN_SIMLIBS_DIR}/${TARGET_NAME}/$<IF:$<CONFIG:Release>,Release,Debug>
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/../include ${UE_PLUGIN_SIMLIBS_DIR}/${TARGET_NAME}/include
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_BINARY_DIR}/commit_hash.txt ${UE_PLUGIN_SIMLIBS_DIR}/commit_hash.txt
     COMMAND ${CMAKE_COMMAND} -E remove_directory ${UE_PLUGIN_SIMLIBS_DIR}/${TARGET_NAME}/$<IF:$<CONFIG:Release>,Release,Debug>/CMakeFiles
     COMMAND ${CMAKE_COMMAND} -E remove -f ${UE_PLUGIN_SIMLIBS_DIR}/${TARGET_NAME}/$<IF:$<CONFIG:Release>,Release,Debug>/cmake_install.cmake
     COMMAND ${CMAKE_COMMAND} -E remove -f ${UE_PLUGIN_SIMLIBS_DIR}/${TARGET_NAME}/$<IF:$<CONFIG:Release>,Release,Debug>/CTestTestfile.cmake

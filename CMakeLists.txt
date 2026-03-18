@@ -41,6 +41,28 @@ endif()
 # Set up project
 project("ProjectAirSimLibs")
 
+# Capture build commit hash once during configure. Fallback to "unknown"
+# when git is unavailable (or source is not a git checkout).
+set(PROJECTAIRSIM_BUILD_COMMIT_HASH "unknown")
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE PROJECTAIRSIM_BUILD_COMMIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE PROJECTAIRSIM_GIT_RESULT
+    )
+
+    if(NOT PROJECTAIRSIM_GIT_RESULT EQUAL 0 OR PROJECTAIRSIM_BUILD_COMMIT_HASH STREQUAL "")
+        set(PROJECTAIRSIM_BUILD_COMMIT_HASH "unknown")
+    endif()
+endif()
+message("PROJECTAIRSIM_BUILD_COMMIT_HASH set to ${PROJECTAIRSIM_BUILD_COMMIT_HASH}")
+
+file(WRITE ${CMAKE_BINARY_DIR}/commit_hash.txt "${PROJECTAIRSIM_BUILD_COMMIT_HASH}\n")
+
 # Set up paths for packaging the sim libs build outputs as custom post-command steps
 set(SIMLIBS_PACKAGE_DIR ${CMAKE_SOURCE_DIR}/packages/projectairsim_simlibs)
 set(SIMLIBS_SHARED_LIB_DIR ${SIMLIBS_PACKAGE_DIR}/shared_libs)

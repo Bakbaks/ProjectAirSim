@@ -163,6 +163,15 @@ class ProjectAirSimClient:
         else:
             utils.projectairsim_log().info("Successfully set interactive feature.")
 
+    def get_build_commit_hash(self) -> str:
+        """Gets the commit hash used to build the current sim libs."""
+        hash_req: Dict = {
+            "method": "/Sim/GetBuildCommitHash",
+            "params": {},
+            "version": 1.0,
+        }
+        return self.request(hash_req)
+
     def unsubscribe(self, topics):
         """Unsubscribes from one or more server topics
 
