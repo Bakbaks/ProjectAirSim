@@ -90,7 +90,7 @@ void JSBSimPhysicsBody::InitializeJSBSimPhysicsBody(
   is_grounded_ = sim_robot_.GetStartLanded();
   
   model_ = sim_robot_.GetJSBSimModel();
-  model_->Setdt(0.008333333333); //TODO: use configuration instead of harcoded value
+  model_->Setdt(0.008333333333333333); //TODO: use configuration instead of harcoded value
 
   // get difference betweeen JSBSim's initial geopoint position and home geopoint position
   const auto& world_geopoint = sim_robot_.GetEnvironment().home_geo_point.geo_point;
@@ -399,7 +399,7 @@ Kinematics JSBSimPhysicsModel::CalcNextKinematicsNoCollision(
 
   residual_time_ += dt_sec;
   // get jsbsim dt
-  double jsbsim_dt = fp_body->model_->GetDeltaT();
+  double jsbsim_dt = 0.008333333333333333;
 
   // Run JSBSim for the residual time
   while (residual_time_ >= jsbsim_dt) {

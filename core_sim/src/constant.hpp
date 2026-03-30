@@ -419,7 +419,7 @@ class Constant {
     static constexpr const char* coeff_of_thrust = "coeff-of-thrust";
     static constexpr const char* coeff_of_torque = "coeff-of-torque";
     static constexpr const char* wheel_type = "wheel-type";
-    static constexpr const char* coeff_of_wheel_torque = "coeff-of-wheel_torque";
+    static constexpr const char* coeff_of_wheel_torque = "coeff-of-wheel-torque";
     static constexpr const char* coeff_of_friction = "coeff-of-friction";
     static constexpr const char* air_density = "air-density";
     static constexpr const char* max_rpm = "max-rpm";
@@ -429,8 +429,15 @@ class Constant {
     static constexpr const char* rotor_settings = "rotor-settings";
     static constexpr const char* jsbsim_cmd = "jsbsim-cmd";
     static constexpr const char* jsbsim_state = "jsbsim-state";
+    static constexpr const char* jsbsim_cmd_engine = "jsbsim-cmd-engine";
+    static constexpr const char* jsbsim_cmd_steering =
+        "jsbsim-cmd-steering";
+    static constexpr const char* jsbsim_cmd_brake = "jsbsim-cmd-brake";
     static constexpr const char* wheel_settings = "wheel-settings";
     static constexpr const char* steering_connected = "steering-connected";
+    static constexpr const char* engine_connected = "engine";
+    static constexpr const char* steering = "steering";
+    static constexpr const char* brake = "brake";
     static constexpr const char* first_order_filter_tc =
         "first-order-filter-tc";
     static constexpr const char* controller = "controller";

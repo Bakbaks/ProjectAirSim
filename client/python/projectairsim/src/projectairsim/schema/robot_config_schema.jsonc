@@ -130,6 +130,7 @@
           "child-link": { "type": "string" },
           "origin": { "$ref": "#/definitions/origin" },
           "rotor-settings": { "$ref": "#/definitions/rotor-settings" },
+          "lift-drag-control-surface-settings": { "$ref": "#/definitions/lift-drag-control-surface-settings" },
           "wheel-settings": { "$ref": "#/definitions/wheel-settings" },
           "tilt-settings": { "$ref": "#/definitions/tilt-settings" }
         }
@@ -577,19 +578,36 @@
         "coeff-of-torque": { "type": "number" },
         "max-rpm": { "type": "number" },
         "propeller-diameter": { "type": "number" },
-        "smoothing-tc": { "type": "number" }
+        "smoothing-tc": { "type": "number" },
+        "jsbsim-cmd": { "type": "string" },
+        "jsbsim-state": { "type": "string" }
+      }
+    },
+    "lift-drag-control-surface-settings": {
+      "type": "object",
+      "required": [ "rotation-rate", "smoothing-tc" ],
+      "properties": {
+        "rotation-rate": { "type": "number" },
+        "smoothing-tc": { "type": "number" },
+        "jsbsim-cmd": { "type": "string" },
+        "jsbsim-state": { "type": "string" }
       }
     },
     "wheel-settings": {
       "type": "object",
       "required": ["wheel-type", "coeff-of-friction", "coeff-of-wheel-torque", "engine", "steering", "brake"],
       "properties": {
+        "normal-vector": { "type": "string" },
+        "smoothing-tc": { "type": "number" },
         "wheel-type": { "type": "number" },
         "coeff-of-friction":{"type":"number"},
         "coeff-of-wheel-torque":{"type":"number"},
         "engine": {"type": "boolean"},
         "steering": {"type": "boolean"},
-        "brake": {"type": "boolean"}
+        "brake": {"type": "boolean"},
+        "jsbsim-cmd-engine": { "type": "string" },
+        "jsbsim-cmd-steering": { "type": "string" },
+        "jsbsim-cmd-brake": { "type": "string" }
       }
     },
     "tilt-settings": {
@@ -601,7 +619,9 @@
         "axis": { "type": "string" },
         "input-map": { "$ref": "#/definitions/input-map" },
         "smoothing-tc": { "type": "number" },
-        "target": { "type": "string" }
+        "target": { "type": "string" },
+        "jsbsim-cmd": { "type": "string" },
+        "jsbsim-state": { "type": "string" }
       }
     },
     "is-simple-flight": {

@@ -558,12 +558,30 @@ void Robot::Impl::Load(ConfigJson config_json) {
   if (physics_type_ == PhysicsType::kJSBSimPhysics) {
     InitializeJSBSimModel();
 
-    // Wire JSBSim model to rotor actuators that have jsbsim-cmd configured
+    // Wire JSBSim model to actuators that have JSBSim bridging configured.
     for (auto& actuator : actuators_) {
       if (actuator->GetType() == ActuatorType::kRotor) {
         auto& rotor = static_cast<Rotor&>(*actuator);
         if (!rotor.GetRotorSettings().jsbsim_cmd.empty()) {
           rotor.SetJSBSimModel(model_);
+        }
+      } else if (actuator->GetType() == ActuatorType::kTilt) {
+        auto& tilt = static_cast<Tilt&>(*actuator);
+        if (!tilt.GetSettings().jsbsim_cmd.empty()) {
+          tilt.SetJSBSimModel(model_);
+        }
+      } else if (actuator->GetType() == ActuatorType::kLiftDragControlSurface) {
+        auto& surface = static_cast<LiftDragControlSurface&>(*actuator);
+        if (!surface.GetSettings().jsbsim_cmd.empty()) {
+          surface.SetJSBSimModel(model_);
+        }
+      } else if (actuator->GetType() == ActuatorType::kWheel) {
+        auto& wheel = static_cast<Wheel&>(*actuator);
+        const auto& settings = wheel.GetWheelSettings();
+        if (!settings.jsbsim_cmd_engine.empty() ||
+            !settings.jsbsim_cmd_steering.empty() ||
+            !settings.jsbsim_cmd_brake.empty()) {
+          wheel.SetJSBSimModel(model_);
         }
       }
     }
