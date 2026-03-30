@@ -5,7 +5,6 @@
 #include "SceneView.h"
 #include "RenderGraph.h"
 #include "ScreenPass.h"
-#include "RenderGraphUtils.h"
 #include "CommonRenderResources.h"
 #include "Containers/DynamicRHIResourceArray.h"
 #include "Engine/World.h"
@@ -117,12 +116,7 @@ FLidarIntensitySceneViewExtension::FLidarIntensitySceneViewExtension(
     const FAutoRegister& AutoRegister,
     TWeakObjectPtr<UTextureRenderTarget2D> InRenderTarget2D)
     : FSceneViewExtensionBase(AutoRegister),
-      RenderTarget2D(InRenderTarget2D) {
-  for (int i = 0; i < NumReadbackBuffers; ++i) {
-    ReadbackBuffers[i] = MakeUnique<FRHIGPUBufferReadback>(FName(*FString::Printf(TEXT("LidarReadback_%d"), i)));
-    ReadbackBuffersSizes[i] = 0;
-  }
-}
+      RenderTarget2D(InRenderTarget2D) {}
 
 void FLidarIntensitySceneViewExtension::PrePostProcessPass_RenderThread(
     FRDGBuilder& GraphBuilder, const FSceneView& View,
@@ -251,40 +245,14 @@ void FLidarIntensitySceneViewExtension::PrePostProcessPass_RenderThread(
       cachedParams.NumCams * cachedParams.HorizontalResolution * cachedParams.LaserNums;
   uint32 BufferSize = NumPoints * sizeof(float) * 4;
 
-  // Readback from previous frames if available
-  auto& CurrentReadback = ReadbackBuffers[CurrentReadbackIndex];
-  uint32 CurrentSize = ReadbackBuffersSizes[CurrentReadbackIndex];
-
-  if (CurrentSize > 0 && CurrentReadback && CurrentReadback->IsReady()) {
-      void* BufferData = CurrentReadback->Lock(CurrentSize);
-      if (BufferData) {
-          // Resize vector to match the data we are reading back
-          const int NumPointsRead = CurrentSize / (sizeof(float) * 4);
-          if (LidarPointCloudData.size() != NumPointsRead) {
-            LidarPointCloudData.resize(NumPointsRead);
-          }
-          
-          FMemory::Memcpy(LidarPointCloudData.data(), BufferData, CurrentSize);
-          CurrentReadback->Unlock();
-      }
-  }
-
-  // Guard: nothing to dispatch if NumPoints is zero.
-  if (NumPoints == 0) {
-    return;
-  }
-
-  // Create an RDG structured buffer for the compute shader output.
-  // We do NOT upload initial data here (no nullptr crash); the shader writes
-  // every slot, and AddClearUAVFloatPass zeroes any slots it misses.
   FRDGBufferRef PointCloudBufferRDG =
-      GraphBuilder.CreateBuffer(
-          FRDGBufferDesc::CreateStructuredDesc(sizeof(float), NumPoints * 4),
-          TEXT("FLidarPointCloudCS_PointCloudBuffer"));
+      CreateStructuredBuffer(GraphBuilder,
+                             TEXT("FLidarPointCloudCS_PointCloudBuffer"),
+                             sizeof(float), NumPoints * 4, nullptr,
+                             BufferSize);
 
-  // Structured UAV — no pixel format; must match RWStructuredBuffer<float> in HLSL.
-  FRDGBufferUAVRef PointCloudBufferUAV = GraphBuilder.CreateUAV(PointCloudBufferRDG);
-  AddClearUAVFloatPass(GraphBuilder, PointCloudBufferUAV, -1.0f);
+  FRDGBufferUAVRef PointCloudBufferUAV = GraphBuilder.CreateUAV(
+      PointCloudBufferRDG, PF_FloatRGBA, ERDGUnorderedAccessViewFlags::None);
 
   FLidarPointCloudCS::FParameters* PassParameters =
       GraphBuilder.AllocParameters<FLidarPointCloudCS::FParameters>();
@@ -316,17 +284,12 @@ void FLidarIntensitySceneViewExtension::PrePostProcessPass_RenderThread(
       NUM_THREADS_PER_GROUP_DIMENSION_Y,
       NUM_THREADS_PER_GROUP_DIMENSION_Z);
 
+  LidarPointCloudData =
+      std::vector<FVector4>(NumPoints, FVector4(-1, -1, -1, -1));
+
   FComputeShaderUtils::AddPass(
       GraphBuilder, RDG_EVENT_NAME("LidarPointCloud Pass"),
       LidarPointCloudShader, PassParameters, GroupContext);
-
-  AddEnqueueCopyPass(GraphBuilder, CurrentReadback.Get(), PointCloudBufferRDG, BufferSize);
-
-  // Store the size for the next time we encounter this buffer slot
-  ReadbackBuffersSizes[CurrentReadbackIndex] = BufferSize;
-
-  // Advance index for next frame
-  CurrentReadbackIndex = (CurrentReadbackIndex + 1) % NumReadbackBuffers;
 }
 
 void FLidarIntensitySceneViewExtension::UpdateParameters(
