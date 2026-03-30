@@ -306,23 +306,18 @@ Vector3 JSBSimPhysicsBody::GetModelCoordinates(){ //TODO: use GeoPoint instead o
 
 Vector3 JSBSimPhysicsBody::GetModelPosition() {
   auto* propagate = model_->GetPropagate();
-  auto* aux = model_->GetAuxiliary();
-  //get latitude displacement
-  auto delta_lat = propagate->GetLocation().GetLatitudeDeg() -
-          home_geopoint_[0];
-  //get latitude in meters
-  double n = std::copysign(
-      aux->GetLatitudeRelativePosition(),
-      delta_lat);
-  // get longitud displacement
-  auto delta_lon = propagate->GetLocation().GetLongitudeDeg() -
-          home_geopoint_[1];
-  //get longitud in meters
-  double e = std::copysign(
-      aux->GetLongitudeRelativePosition(),
-      delta_lon);
-  double d =
-      -(propagate->GetAltitudeASLmeters() - home_geopoint_[2]);
+
+  GeodeticConverter converter(home_geopoint_[0], home_geopoint_[1],
+                              home_geopoint_[2]);
+
+  double n = 0.0;
+  double e = 0.0;
+  double d = 0.0;
+  converter.geodetic2Ned(propagate->GetLocation().GetGeodLatitudeDeg(),
+                         propagate->GetLocation().GetLongitudeDeg(),
+                         static_cast<float>(propagate->GetAltitudeASLmeters()),
+                         &n, &e, &d);
+
   return Vector3(n, e, d);
 }
 
