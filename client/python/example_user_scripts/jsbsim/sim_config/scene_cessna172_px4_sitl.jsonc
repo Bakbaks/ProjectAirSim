@@ -1,0 +1,32 @@
+{
+  "$schema": "../../../projectairsim/src/projectairsim/schema/scene_config_schema.jsonc",
+  "id": "SceneCessna172PX4SITL",
+  "actors": [
+    {
+      "type": "robot",
+      "name": "c172_px4",
+      "origin": {
+        "xyz": "3 -2 -10",
+        "rpy": "0 0 0"
+      },
+      "robot-config": "robot_cessna172_px4_sitl.jsonc"
+    }
+  ],
+  "clock": {
+    "type": "steppable",
+    "step-ns": 3000000,
+    "real-time-update-rate": 3000000,
+    "pause-on-start": false
+  },
+  "home-geo-point": {
+    "latitude": 29.4296741,
+    "longitude": -95.16384722,
+    "altitude": 7.5
+  },
+  "segmentation": {
+    "initialize-ids": true,
+    "ignore-existing": false,
+    "use-owner-name": true
+  },
+  "scene-type": "UnrealNative"
+}
