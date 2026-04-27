@@ -341,6 +341,7 @@ class Constant {
     static constexpr const char* generic_cylindrical = "generic_cylindrical";
     static constexpr const char* generic_rosette = "generic_rosette";
     static constexpr const char* gpu_cylindrical = "gpu_cylindrical";
+    static constexpr const char* depth_lidar = "depth_lidar";
     static constexpr const char* livox_avia = "livox_avia";
     static constexpr const char* livox_mid70 = "livox_mid70";
     static constexpr const char* report_point_cloud = "report-point-cloud";
