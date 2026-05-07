@@ -6,26 +6,38 @@
 if [ -z "$UE_ROOT" ]
 then
   echo
-  echo ERROR: UE_ROOT environmant variable is not set. It must be set to the target \
+  echo ERROR: UE_ROOT environment variable is not set. It must be set to the target \
     Unreal engine\'s root folder path, ex. /home/projectairsimuser/UnrealEngine-5.0.3
 else
-  # Generate VS Code UE project files (overwrites .vscode\settings.json)
-  echo Generating VS Code project files with environment variable UE_ROOT=$UE_ROOT
+  # Find the .uproject file in the current directory
   SCRIPTDIR=$(dirname "$(readlink -f "$0")")
   cd $SCRIPTDIR
-  $UE_ROOT/Engine/Build/BatchFiles/Linux/Build.sh -projectfiles -vscode -project="$SCRIPTDIR/Blocks.uproject" -game
+  UPROJECT_FILE=$(find . -maxdepth 1 -name "*.uproject" | head -n 1)
 
-  # Insert projectairsim project folder into UE-generated Block.code-workspace
-  echo "{" > AirSimBlocks.code-workspace
-  echo "	\"folders\": [" >> AirSimBlocks.code-workspace
-  echo "		{" >> AirSimBlocks.code-workspace
-  echo "			\"name\": \"projectairsim\"," >> AirSimBlocks.code-workspace
-  echo "			\"path\": \"../..\"" >> AirSimBlocks.code-workspace
-  echo "		}," >> AirSimBlocks.code-workspace
-  sed '1,2d' Blocks.code-workspace >> AirSimBlocks.code-workspace
-  mv AirSimBlocks.code-workspace Blocks.code-workspace
+  if [ -z "$UPROJECT_FILE" ]
+  then
+    echo "ERROR: No .uproject file found in the current directory."
+    exit 1
+  fi
 
-  # Fix UE's generated game target binary names from UnrealGame to Blocks in launch.json
-  sed -i 's/UnrealGame-/Blocks-/g' .vscode/launch.json
-  sed -i 's/UnrealGame"/Blocks"/g' .vscode/launch.json
+  # Extract the project name from the .uproject file
+  PROJECT_NAME=$(basename "$UPROJECT_FILE" .uproject)
+
+  # Generate VS Code UE project files (overwrites .vscode/settings.json)
+  echo Generating VS Code project files with environment variable UE_ROOT=$UE_ROOT for project $PROJECT_NAME
+  $UE_ROOT/Engine/Build/BatchFiles/Linux/Build.sh -projectfiles -vscode -project="$SCRIPTDIR/$UPROJECT_FILE" -game
+
+  # Insert projectairsim project folder into UE-generated .code-workspace file
+  echo "{" > AirSim$PROJECT_NAME.code-workspace
+  echo "	\"folders\": [" >> AirSim$PROJECT_NAME.code-workspace
+  echo "		{" >> AirSim$PROJECT_NAME.code-workspace
+  echo "			\"name\": \"projectairsim\"," >> AirSim$PROJECT_NAME.code-workspace
+  echo "			\"path\": \"../..\"" >> AirSim$PROJECT_NAME.code-workspace
+  echo "		}," >> AirSim$PROJECT_NAME.code-workspace
+  sed '1,2d' $PROJECT_NAME.code-workspace >> AirSim$PROJECT_NAME.code-workspace
+  mv AirSim$PROJECT_NAME.code-workspace $PROJECT_NAME.code-workspace
+
+  # Fix UE's generated game target binary names from UnrealGame to the project name in launch.json
+  sed -i "s/UnrealGame-/$PROJECT_NAME-/g" .vscode/launch.json
+  sed -i "s/UnrealGame\"/$PROJECT_NAME\"/g" .vscode/launch.json
 fi
