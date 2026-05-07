@@ -434,3 +434,24 @@ add_subdirectory(rendering)
 add_subdirectory(tools)
 add_subdirectory(unity)
 add_subdirectory(vehicle_apis)
+
+if(BUILD_TESTING)
+    set(SIMLIBS_UNIT_TEST_TARGETS
+        core_sim_gtests
+        physics_gtests
+        rendering_scene_gtests
+        multirotor_api_gtests
+        rover_api_gtests
+    )
+
+    if(WIN32)
+        list(APPEND SIMLIBS_UNIT_TEST_TARGETS MavLinkTest)
+    endif()
+
+    add_custom_target(simlibs_unit_tests)
+    foreach(TEST_TARGET ${SIMLIBS_UNIT_TEST_TARGETS})
+        if(TARGET ${TEST_TARGET})
+            add_dependencies(simlibs_unit_tests ${TEST_TARGET})
+        endif()
+    endforeach()
+endif()

@@ -126,6 +126,8 @@ clean:
 
 CTEST_DBG_CMD = ctest -C Debug -V -T test --no-compress-output
 CTEST_REL_CMD = ctest -C Release -V -T test --no-compress-output
+CMAKE_DBG_TEST_BUILD_CMD = cmake --build $(CMAKE_BUILD_DIR)\Debug --target simlibs_unit_tests
+CMAKE_REL_TEST_BUILD_CMD = cmake --build $(CMAKE_BUILD_DIR)\Release --target simlibs_unit_tests
 CMAKE_DBG_TEST_CMD = cd $(CMAKE_BUILD_DIR)\Debug && $(CTEST_DBG_CMD)
 CMAKE_REL_TEST_CMD = cd $(CMAKE_BUILD_DIR)\Release && $(CTEST_REL_CMD)
 
@@ -133,12 +135,14 @@ CMAKE_REL_TEST_CMD = cd $(CMAKE_BUILD_DIR)\Release && $(CTEST_REL_CMD)
 test_simlibs_debug: simlibs_debug
 	@echo =======================================================================
 	@echo Testing the ProjectAirSimLibs project for Win64-Debug...
+	$(CMAKE_DBG_TEST_BUILD_CMD)
 	$(CMAKE_DBG_TEST_CMD)
 
 .PHONY: test_simlibs_release
 test_simlibs_release: simlibs_release
 	@echo =======================================================================
 	@echo Testing the ProjectAirSimLibs project for Win64-Release...
+	$(CMAKE_REL_TEST_BUILD_CMD)
 	$(CMAKE_REL_TEST_CMD)
 
 # ---------------------------------------------------------------------------------------------------------------------

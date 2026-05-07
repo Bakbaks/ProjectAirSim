@@ -20,6 +20,7 @@ set(TARGET_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 add_executable(
     ${TARGET_NAME}
+    EXCLUDE_FROM_ALL
     gtest_physics_world.cpp
     gtest_fast_physics.cpp
     gtest_unreal_physics.cpp
