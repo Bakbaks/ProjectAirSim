@@ -42,24 +42,39 @@ class Simulator {
 namespace projectairsim = microsoft::projectairsim;
 
 TEST(Scene, Constructor) {
+  // General description:
+  // Verifies constructor for Scene.
+  // Arrange: prepare context for `EXPECT_FALSE(projectairsim::Simulator::MakeScene().IsLoaded());`.
+  // Act: run `EXPECT_FALSE(projectairsim::Simulator::MakeScene().IsLoaded());`.
+  // Assert: check result from `EXPECT_FALSE(projectairsim::Simulator::MakeScene().IsLoaded());`.
   EXPECT_FALSE(projectairsim::Simulator::MakeScene().IsLoaded());
 }
 
 TEST(Scene, LoadScene) {
+  // General description:
+  // Verifies load scene for Scene.
+  // Arrange: prepare context for `json json = "{ \"id\": \"a\"}"_json;`.
   json json = "{ \"id\": \"a\"}"_json;
   auto scene = projectairsim::Simulator::MakeScene();
   projectairsim::Simulator::LoadScene(scene, json);
 
   json = "{ \"id\": \"1abc\" }"_json;
+  // Act: run `scene = projectairsim::Simulator::MakeScene();`.
   scene = projectairsim::Simulator::MakeScene();
+  // Assert: check result from `EXPECT_THROW(projectairsim::Simulator::LoadScene(scene, json),`.
   EXPECT_THROW(projectairsim::Simulator::LoadScene(scene, json),
                projectairsim::Error);
 }
 
 TEST(Scene, IsLoaded) {
+  // General description:
+  // Verifies is loaded for Scene.
+  // Arrange: prepare context for `json json = "{ \"id\": \"a\"}"_json;`.
   json json = "{ \"id\": \"a\"}"_json;
   auto scene = projectairsim::Simulator::MakeScene();
+  // Act: run `projectairsim::Simulator::LoadScene(scene, json);`.
   projectairsim::Simulator::LoadScene(scene, json);
+  // Assert: check result from `EXPECT_TRUE(scene.IsLoaded());`.
   EXPECT_TRUE(scene.IsLoaded());
 
   json = "{ \"id\": \"1abc\" }"_json;
@@ -70,9 +85,14 @@ TEST(Scene, IsLoaded) {
 }
 
 TEST(Scene, GetID) {
+  // General description:
+  // Verifies get id for Scene.
+  // Arrange: prepare context for `json json = "{ \"id\": \"a\"}"_json;`.
   json json = "{ \"id\": \"a\"}"_json;
   auto scene = projectairsim::Simulator::MakeScene();
+  // Act: run `projectairsim::Simulator::LoadScene(scene, json);`.
   projectairsim::Simulator::LoadScene(scene, json);
+  // Assert: check result from `EXPECT_EQ(scene.GetID(), "a");`.
   EXPECT_EQ(scene.GetID(), "a");
 
   json = "{ \"id\": \"1abc\" }"_json;
@@ -83,9 +103,14 @@ TEST(Scene, GetID) {
 }
 
 TEST(Scene, GetActors) {
+  // General description:
+  // Verifies get actors for Scene.
+  // Arrange: prepare context for `json json = "{ \"id\": \"a\"}"_json;`.
   json json = "{ \"id\": \"a\"}"_json;
   auto scene = projectairsim::Simulator::MakeScene();
+  // Act: run `projectairsim::Simulator::LoadScene(scene, json);`.
   projectairsim::Simulator::LoadScene(scene, json);
+  // Assert: check result from `EXPECT_EQ(scene.GetActors().size(), 0);`.
   EXPECT_EQ(scene.GetActors().size(), 0);
 
   json = R"({"id": "ProjectAirSim",

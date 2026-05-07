@@ -23,6 +23,7 @@ add_executable(
     gtest_physics_world.cpp
     gtest_fast_physics.cpp
     gtest_unreal_physics.cpp
+    gtest_matlab_physics.cpp
 )
 
 set_target_properties(

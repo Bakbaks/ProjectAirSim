@@ -28,6 +28,7 @@ add_executable(
     gtest_simulator.cpp
     gtest_scene.cpp
     gtest_robot.cpp
+    gtest_control_mapper.cpp
     gtest_env_actor.cpp
     gtest_trajectory.cpp
     gtest_link.cpp
@@ -41,14 +42,25 @@ add_executable(
     gtest_airspeed.cpp
     gtest_barometer.cpp
     gtest_magnetometer.cpp
+    gtest_battery.cpp
     gtest_actuator.cpp
+    gtest_gimbal.cpp
+    gtest_tilt.cpp
+    gtest_rotor_setting.cpp
+    gtest_wheel_setting.cpp
+    gtest_noise_model_utils.cpp
     gtest_clock.cpp
     gtest_message.cpp
+    gtest_battery_message.cpp
+    gtest_pose_message.cpp
+    gtest_kinematics_message.cpp
+    gtest_rotor_message.cpp
     gtest_service_method.cpp
     gtest_lidar.cpp
     gtest_gps.cpp
     gtest_geodetic_converter.cpp
     gtest_radar.cpp
+    gtest_coordinate_integration.cpp
 )
 
 set_target_properties(

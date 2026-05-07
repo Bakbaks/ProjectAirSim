@@ -174,7 +174,11 @@ ExternalProject_Add_Step(nng-external post-install
 # Assimp compiler-specific flags
 set(ASSIMP_EXTRA_CXX_FLAGS "")
 
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+if (MSVC)
+    # Assimp builds as an external project and does not inherit add_compile_options(/EHsc).
+    # Pass /EHsc explicitly to avoid C4530 when assimp treats warnings as errors.
+    set(ASSIMP_EXTRA_CXX_FLAGS "/EHsc")
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     set(ASSIMP_EXTRA_CXX_FLAGS "-Wno-error=nontrivial-memcall")
 endif()
 
