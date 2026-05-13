@@ -6,6 +6,7 @@ End-to-end tests for ProjectAirSim Services, request-response APIs
 """
 
 from math import radians
+import math
 import time
 
 import pytest
@@ -71,8 +72,9 @@ def test_sensor_timestamp_validity(drone):
         raise Exception(str(err))
 
 
-def test_get_imu_data(drone):
+def test_get_imu_data(drone, world):
     try:
+        world.pause()
         imu_data = drone.get_imu_data("IMU1")
         print(f"imu_data:{imu_data}")
         expected_fields = [
@@ -92,6 +94,16 @@ def test_get_imu_data(drone):
         assert sorted(["x", "y", "z"]) == sorted(
             utils.decode(imu_data["linear_acceleration"].keys())
         )
+
+        kin = drone.get_ground_truth_kinematics()
+        q_imu = imu_data["orientation"]
+        q_gt = kin["pose"]["orientation"]
+        r_imu = quaternion_to_rpy(q_imu["w"], q_imu["x"], q_imu["y"], q_imu["z"])
+        r_gt = quaternion_to_rpy(q_gt["w"], q_gt["x"], q_gt["y"], q_gt["z"])
+        for a, b in zip(r_imu, r_gt):
+            assert a == pytest.approx(b, abs=0.08)
+        world.resume()
+
     except NNGException as err:
         raise Exception(str(err))
 
@@ -118,17 +130,28 @@ def test_get_gps_data(drone):
             utils.decode(gps_data["velocity"].keys())
         )
 
+        loc = drone.get_ground_truth_geo_location()
+        assert gps_data["latitude"] == pytest.approx(loc["latitude"], abs=1e-4)
+        assert gps_data["longitude"] == pytest.approx(loc["longitude"], abs=1e-4)
+        assert gps_data["altitude"] == pytest.approx(loc["altitude"], abs=2.0)
+
     except NNGException as err:
         raise Exception(str(err))
 
 
-def test_get_barometer_data(drone):
+def test_get_barometer_data(drone, world):
     try:
+        world.pause()
         barometer_data = drone.get_barometer_data("Barometer")
         print(f"barometer_data:{barometer_data}")
         expected_fields = ["time_stamp", "altitude", "pressure", "qnh"]
         actual_fields = barometer_data.keys()
         assert sorted(expected_fields) == sorted(actual_fields)
+
+        loc = drone.get_ground_truth_geo_location()
+        assert barometer_data["altitude"] == pytest.approx(loc["altitude"], abs=15.0)
+        assert 50000.0 < barometer_data["pressure"] < 120000.0
+        world.resume()
 
     except NNGException as err:
         raise Exception(str(err))
@@ -148,12 +171,16 @@ def test_get_magnetometer_data(drone):
         assert sorted(["x", "y", "z"]) == sorted(
             utils.decode(magnetometer_data["magnetic_field_body"].keys())
         )
+        b = utils.decode(magnetometer_data["magnetic_field_body"])
+        bn = math.hypot(float(b["x"]), float(b["y"]), float(b["z"]))
+        assert bn > 1e-6
 
     except NNGException as err:
         raise Exception(str(err))
 
-def test_get_airspeed_data(drone):
+def test_get_airspeed_data(drone, world):
     try:
+        world.pause()
         airspeed_data = drone.get_airspeed_data("Airspeed")
         print(f"airspeed_data:{airspeed_data}")
         expected_fields = [
@@ -162,6 +189,8 @@ def test_get_airspeed_data(drone):
         ]
         actual_fields = airspeed_data.keys()
         assert sorted(expected_fields) == sorted(actual_fields)
+        assert abs(airspeed_data["diff_pressure"]) < 500.0
+        world.resume()
 
     except NNGException as err:
         raise Exception(str(err))

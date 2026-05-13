@@ -9,14 +9,19 @@ import asyncio
 from datetime import datetime
 import math
 import time
+from typing import Dict, Tuple
 
+import numpy as np
 from pynng import NNGException
 import pytest
-from typing import Dict
 
 from projectairsim import Drone, ProjectAirSimClient, World
 from projectairsim.image_utils import segmentation_id_to_color, segmentation_color_to_id
-from projectairsim.utils import geo_to_ned_coordinates
+from projectairsim.utils import (
+    geo_to_ned_coordinates,
+    quaternion_to_rpy,
+    unpack_image,
+)
 from projectairsim.types import (
     Pose,
     Vector3,
@@ -27,6 +32,21 @@ from projectairsim.types import (
     Color,
     LandedState,
 )
+
+
+def _bgr_center_mean(image_msg: Dict) -> np.ndarray:
+    """Mean BGR in a center crop of a camera image message."""
+    bgr = unpack_image(image_msg)
+    h, w = bgr.shape[:2]
+    cy, cx = h // 2, w // 2
+    y0, y1 = max(0, cy - 24), min(h, cy + 24)
+    x0, x1 = max(0, cx - 24), min(w, cx + 24)
+    patch = bgr[y0:y1, x0:x1]
+    return patch.mean(axis=(0, 1)).astype(np.float64)
+
+
+def _quat_dict_rpy(q: Dict[str, float]) -> Tuple[float, float, float]:
+    return quaternion_to_rpy(q["w"], q["x"], q["y"], q["z"])
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -166,14 +186,17 @@ def test_move_by_velocity_async(client):
 
 
 async def move_by_velocity_z_async(drone):
-    # basic test for now to make sure no exceptions are thrown
     take_off = await drone.takeoff_async()
     await take_off
 
+    z0 = drone.get_ground_truth_pose()["translation"]["z"]
     move_at_z = await drone.move_by_velocity_z_async(
         v_north=2.0, v_east=0.0, z=-5.0, duration=2.0
     )
     await move_at_z
+    z1 = drone.get_ground_truth_pose()["translation"]["z"]
+    assert z1 == pytest.approx(-5.0, abs=4.0)
+    assert z1 <= z0 + 0.5
 
 
 def test_move_by_velocity_z_async(client):
@@ -185,7 +208,7 @@ def test_move_by_velocity_z_async(client):
         assert api_control_enabled is True
         armed = drone.arm()
         assert armed is True
-        asyncio.run(move_by_velocity_async(drone))
+        asyncio.run(move_by_velocity_z_async(drone))
         disarmed = drone.disarm()
         assert disarmed is True
         api_control_disabled = drone.disable_api_control()
@@ -224,14 +247,17 @@ def test_move_by_velocity_body_frame_async(client):
 
 
 async def move_by_velocity_body_frame_z_async(drone):
-    # basic test for now to make sure no exceptions are thrown
     take_off = await drone.takeoff_async()
     await take_off
 
+    z0 = drone.get_ground_truth_pose()["translation"]["z"]
     move_at_z = await drone.move_by_velocity_body_frame_z_async(
         v_forward=2.0, v_right=0.0, z=-5.0, duration=2.0
     )
     await move_at_z
+    z1 = drone.get_ground_truth_pose()["translation"]["z"]
+    assert z1 == pytest.approx(-5.0, abs=4.0)
+    assert z1 <= z0 + 0.5
 
 
 def test_move_by_velocity_body_frame_z_async(client):
@@ -243,7 +269,7 @@ def test_move_by_velocity_body_frame_z_async(client):
         assert api_control_enabled is True
         armed = drone.arm()
         assert armed is True
-        asyncio.run(move_by_velocity_body_frame_async(drone))
+        asyncio.run(move_by_velocity_body_frame_z_async(drone))
         disarmed = drone.disarm()
         assert disarmed is True
         api_control_disabled = drone.disable_api_control()
@@ -453,12 +479,17 @@ def test_rotate_yaw_async(client):
 
 
 async def rotate_by_yaw_rate_async(drone):
-    # basic test for now to make sure no exceptions are thrown
     take_off = await drone.takeoff_async()
     await take_off
 
-    rotate = await drone.rotate_by_yaw_rate_async(yaw=3.14)
+    pose0 = drone.get_ground_truth_pose()
+    r0 = _quat_dict_rpy(pose0["orientation"])
+    rotate = await drone.rotate_by_yaw_rate_async(yaw_rate=0.35, duration=2.5)
     await rotate
+    pose1 = drone.get_ground_truth_pose()
+    r1 = _quat_dict_rpy(pose1["orientation"])
+    dyaw = (r1[2] - r0[2] + math.pi) % (2 * math.pi) - math.pi
+    assert abs(dyaw) > 0.05
 
 
 def test_rotate_by_yaw_rate_async(client):
@@ -470,7 +501,7 @@ def test_rotate_by_yaw_rate_async(client):
         assert api_control_enabled is True
         armed = drone.arm()
         assert armed is True
-        asyncio.run(rotate_to_yaw_async(drone))
+        asyncio.run(rotate_by_yaw_rate_async(drone))
         disarmed = drone.disarm()
         assert disarmed is True
         api_control_disabled = drone.disable_api_control()
@@ -1107,11 +1138,25 @@ def test_wind_velocity(client):
 
 def test_set_object_material(client):
     try:
-        world = World(client, "scene_test_drone.jsonc", 0)
+        world = World(client, "scene_test_drone.jsonc", 1)
+        drone = Drone(client, world, "Drone1")
+
         object_name = "OrangeBall"
+        world.pause()
+        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean0 = _bgr_center_mean(before)
+        world.resume()
+
         material_path = "/ProjectAirSim/Weather/WeatherFX/Materials/M_Leaf_master"
         status = world.set_object_material(object_name, material_path)
         assert status is True
+
+        world.pause()
+        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean1 = _bgr_center_mean(after)
+        world.resume()
+
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.5
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1119,12 +1164,26 @@ def test_set_object_material(client):
 
 def test_set_object_texture_from_url(client):
     try:
-        world = World(client, "scene_test_drone.jsonc", 0)
+        world = World(client, "scene_test_drone.jsonc", 1)
+        drone = Drone(client, world, "Drone1")
 
         url = "https://www.jpl.nasa.gov/spaceimages/images/largesize/PIA07782_hires.jpg"
         object_name = "OrangeBall"
+
+        world.pause()
+        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean0 = _bgr_center_mean(before)
+        world.resume()
+
         status = world.set_object_texture_from_url(object_name, url)
         assert status is True
+
+        world.pause()
+        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean1 = _bgr_center_mean(after)
+        world.resume()
+
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.5
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1132,11 +1191,25 @@ def test_set_object_texture_from_url(client):
 
 def test_set_object_texture_from_file(client):
     try:
-        world = World(client, "scene_test_drone.jsonc", 0)
+        world = World(client, "scene_test_drone.jsonc", 1)
+        drone = Drone(client, world, "Drone1")
         object_name = "OrangeBall"
         texture_path = "assets/sample_texture.png"
+
+        world.pause()
+        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean0 = _bgr_center_mean(before)
+        world.resume()
+
         status = world.set_object_texture_from_file(object_name, texture_path)
         assert status is True
+
+        world.pause()
+        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean1 = _bgr_center_mean(after)
+        world.resume()
+
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.5
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1144,11 +1217,25 @@ def test_set_object_texture_from_file(client):
 
 def test_set_object_texture_from_packaged_asset(client):
     try:
-        world = World(client, "scene_test_drone.jsonc", 0)
+        world = World(client, "scene_test_drone.jsonc", 1)
+        drone = Drone(client, world, "Drone1")
         object_name = "Cone"
         texture_path = "/Game/Geometry/Textures/T_Default_Material_Grid_M"
+
+        world.pause()
+        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean0 = _bgr_center_mean(before)
+        world.resume()
+
         status = world.set_object_texture_from_packaged_asset(object_name, texture_path)
         assert status is True
+
+        world.pause()
+        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean1 = _bgr_center_mean(after)
+        world.resume()
+
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.25
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1156,17 +1243,35 @@ def test_set_object_texture_from_packaged_asset(client):
 
 def test_swap_object_texture(client):
     try:
-        world = World(client, "scene_test_drone.jsonc", 0)
+        world = World(client, "scene_test_drone.jsonc", 1)
+        drone = Drone(client, world, "Drone1")
 
-        # Note: This API searches for the actor tag instead of the actor's name. The
-        # actor tag is set in Editor's actor details under the "Actor" section, not the
-        # component tags in the "Tags" section
         object_actor_tag = "ball"
+
+        world.pause()
+        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean0 = _bgr_center_mean(before)
+        world.resume()
+
         swapped_objects = world.swap_object_texture(object_actor_tag, 1)
         assert len(swapped_objects) > 0
 
+        world.pause()
+        mid = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean1 = _bgr_center_mean(mid)
+        world.resume()
+
         swapped_objects = world.swap_object_texture(object_actor_tag, 0)
         assert len(swapped_objects) > 0
+
+        world.pause()
+        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        mean2 = _bgr_center_mean(after)
+        world.resume()
+
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.2 or float(
+            np.linalg.norm(mean2 - mean1)
+        ) >= 0.2
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1187,8 +1292,13 @@ def test_set_light_object_intensity(client):
         )
         spot_light_object_name = world.spawn_object(pad2_name, spotlight_asset_path, pose, scale, enable_physics)
 
+        pose_before = world.get_object_pose(spot_light_object_name)
         status = world.set_light_object_intensity(spot_light_object_name, 10000.0)
         assert status is True
+        pose_after = world.get_object_pose(spot_light_object_name)
+        assert pose_after.translation.to_list() == pytest.approx(
+            pose_before.translation.to_list(), abs=1e-3
+        )
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1208,9 +1318,14 @@ def test_set_light_object_color(client):
             {"translation": translation, "rotation": rotation, "frame_id": ref_frame}
         )
         spot_light_object_name = world.spawn_object(pad2_name, spotlight_asset_path, pose, scale, enable_physics)
+        pose_before = world.get_object_pose(spot_light_object_name)
         color_rgb = [1.0, 0.0, 0.0]
         status = world.set_light_object_color(spot_light_object_name, color_rgb)
         assert status is True
+        pose_after = world.get_object_pose(spot_light_object_name)
+        assert pose_after.translation.to_list() == pytest.approx(
+            pose_before.translation.to_list(), abs=1e-3
+        )
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1231,11 +1346,18 @@ def test_set_light_object_radius(client):
         )
         spot_light_object_name = world.spawn_object(pad2_name, spot_light_asset_path, pose, scale, enable_physics)
 
+        pose_before = world.get_object_pose(spot_light_object_name)
         status = world.set_light_object_radius(spot_light_object_name, 16000.0)
         assert status is True
+        pose_after = world.get_object_pose(spot_light_object_name)
+        assert pose_after.translation.to_list() == pytest.approx(
+            pose_before.translation.to_list(), abs=1e-3
+        )
 
         directional_light_asset_path = "DirectionalLightActor"
-        directional_light_object_name = world.spawn_object(pad2_name, directional_light_asset_path, pose, scale, enable_physics)
+        directional_light_object_name = world.spawn_object(
+            "DirLightTest1", directional_light_asset_path, pose, scale, enable_physics
+        )
 
         status = world.set_light_object_radius(directional_light_object_name, 16000.0)
         assert status is False
@@ -1393,9 +1515,20 @@ def test_get_set_segmentation_id(client):
 
 def test_switch_streaming_view(client):
     try:
-        world = World(client, "scene_test_drone.jsonc", 0)
+        world = World(client, "scene_test_drone.jsonc", 1)
+        drone = Drone(client, world, "Drone1")
+
+        img0 = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        size0 = (int(img0["width"]), int(img0["height"]))
+        assert size0[0] > 0 and size0[1] > 0
 
         assert world.switch_streaming_view() is True
+        img1 = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        assert (int(img1["width"]), int(img1["height"])) == size0
+
+        assert world.switch_streaming_view() is True
+        img2 = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        assert (int(img2["width"]), int(img2["height"])) == size0
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1489,6 +1622,15 @@ def test_plot_debug_markers(client):
 
         status = world.flush_persistent_markers()
         assert status is True
+        status = world.flush_persistent_markers()
+        assert status is True
+
+        status = world.plot_debug_points(
+            points, color_rgba, size, duration, is_persistent=False
+        )
+        assert status is True
+        status = world.flush_persistent_markers()
+        assert status is True
     except NNGException as err:
         raise Exception(str(err))
 
@@ -1497,6 +1639,7 @@ def test_trace_line(client):
     try:
         world = World(client, "scene_test_drone.jsonc", 0)
 
+        assert world.toggle_trace() is True
         assert world.toggle_trace() is True
 
         assert world.set_trace_line([0.0, 0.0, 1.0, 1.0], 5.0) is True
@@ -1525,12 +1668,24 @@ def test_get_kinematics(client):
         drone = Drone(client, world, "Drone1")
 
         kin = drone.get_ground_truth_kinematics()
+        pose = drone.get_ground_truth_pose()
 
         assert "time_stamp" in kin
 
         assert "pose" in kin
         assert "position" in kin["pose"]
         assert "orientation" in kin["pose"]
+
+        for axis in ("x", "y", "z"):
+            assert kin["pose"]["position"][axis] == pytest.approx(
+                pose["translation"][axis], abs=1e-3
+            )
+        qk, qp = kin["pose"]["orientation"], pose["orientation"]
+        for axis in ("w", "x", "y", "z"):
+            assert qk[axis] == pytest.approx(qp[axis], abs=1e-3)
+        q = kin["pose"]["orientation"]
+        qn = math.sqrt(q["w"] ** 2 + q["x"] ** 2 + q["y"] ** 2 + q["z"] ** 2)
+        assert qn == pytest.approx(1.0, abs=1e-2)
 
         assert "twist" in kin
         assert "linear" in kin["twist"]
@@ -1539,6 +1694,12 @@ def test_get_kinematics(client):
         assert "accels" in kin
         assert "linear" in kin["accels"]
         assert "angular" in kin["accels"]
+
+        lin = kin["twist"]["linear"]
+        ang = kin["twist"]["angular"]
+        for axis in ("x", "y", "z"):
+            assert abs(lin[axis]) < 50.0
+            assert abs(ang[axis]) < 50.0
     except NNGException as err:
         raise Exception(str(err))
 
@@ -1568,6 +1729,10 @@ def test_get_ground_truth_geo_location(client):
         assert "latitude" in loc
         assert "longitude" in loc
         assert "altitude" in loc
+        home = drone.home_geo_point
+        assert loc["latitude"] == pytest.approx(home["latitude"], abs=0.002)
+        assert loc["longitude"] == pytest.approx(home["longitude"], abs=0.002)
+        assert loc["altitude"] == pytest.approx(home["altitude"] + 4.0, abs=2.0)
     except NNGException as err:
         raise Exception(str(err))
 
@@ -1590,10 +1755,14 @@ def test_get_estimated_geo_location(client):
         drone = Drone(client, world, "Drone1")
 
         loc = drone.get_estimated_geo_location()
+        loc_gt = drone.get_ground_truth_geo_location()
 
         assert "latitude" in loc
         assert "longitude" in loc
         assert "altitude" in loc
+        assert loc["latitude"] == pytest.approx(loc_gt["latitude"], abs=0.01)
+        assert loc["longitude"] == pytest.approx(loc_gt["longitude"], abs=0.01)
+        assert loc["altitude"] == pytest.approx(loc_gt["altitude"], abs=5.0)
     except NNGException as err:
         raise Exception(str(err))
 
@@ -1607,6 +1776,8 @@ def test_get_ready_state(client):
 
         assert "ready_val" in state
         assert "ready_message" in state
+        assert isinstance(state["ready_val"], (int, float))
+        assert isinstance(state["ready_message"], str)
     except NNGException as err:
         raise Exception(str(err))
 
@@ -1617,12 +1788,21 @@ def test_get_estimated_kinematics(client):
         drone = Drone(client, world, "Drone1")
 
         kin = drone.get_estimated_kinematics()
+        kin_gt = drone.get_ground_truth_kinematics()
 
         assert "time_stamp" in kin
 
         assert "pose" in kin
         assert "position" in kin["pose"]
         assert "orientation" in kin["pose"]
+
+        for axis in ("x", "y", "z"):
+            assert kin["pose"]["position"][axis] == pytest.approx(
+                kin_gt["pose"]["position"][axis], abs=5.0
+            )
+        q = kin["pose"]["orientation"]
+        qn = math.sqrt(q["w"] ** 2 + q["x"] ** 2 + q["y"] ** 2 + q["z"] ** 2)
+        assert qn == pytest.approx(1.0, abs=1e-2)
 
         assert "twist" in kin
         assert "linear" in kin["twist"]
@@ -1826,7 +2006,7 @@ def test_set_camera_pose(client):
     drone = Drone(client, world, "Drone1")
 
     trans = Vector3({"x": 50, "y": 60, "z": 70})
-    rot = Quaternion({"w": 0, "x": 0, "y": 0, "z": 0})
+    rot = Quaternion({"w": 1, "x": 0, "y": 0, "z": 0})
     pose = Pose(
         {
             "translation": trans,
@@ -1836,20 +2016,52 @@ def test_set_camera_pose(client):
     )
 
     assert drone.set_camera_pose("DownCamera", pose) is True
+    img = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+    assert img["pos_x"] == pytest.approx(50.0, abs=0.5)
+    assert img["pos_y"] == pytest.approx(60.0, abs=0.5)
+    assert img["pos_z"] == pytest.approx(70.0, abs=0.5)
 
 
 def test_set_camera_focal_length(client):
     world = World(client, "scene_test_drone.jsonc", 1)
     drone = Drone(client, world, "Drone1")
 
+    world.pause()
+    before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+    std0 = float(np.std(unpack_image(before)))
+    world.resume()
+
     assert drone.set_focal_length("DownCamera", ImageType.SCENE, 15.0) is True
+
+    world.pause()
+    after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+    std1 = float(np.std(unpack_image(after)))
+    world.resume()
+
+    assert before["width"] == after["width"]
+    assert before["height"] == after["height"]
+    assert abs(std1 - std0) > 1e-6 or std1 > 0.0
 
 
 def test_set_field_of_view(client):
     world = World(client, "scene_test_drone.jsonc", 1)
     drone = Drone(client, world, "Drone1")
 
+    world.pause()
+    before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+    std0 = float(np.std(unpack_image(before)))
+    world.resume()
+
     assert drone.set_field_of_view("DownCamera", ImageType.SCENE, 1.0) is True
+
+    world.pause()
+    after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+    std1 = float(np.std(unpack_image(after)))
+    world.resume()
+
+    assert before["width"] == after["width"]
+    assert before["height"] == after["height"]
+    assert abs(std1 - std0) > 1e-6 or std1 > 0.0
 
 
 def test_create_voxel_grid(client):
@@ -2005,7 +2217,9 @@ def test_request_control_async(client):
         world = World(client, "scene_test_drone.jsonc", 1)
         drone = Drone(client, world, "Drone1")
 
+        assert drone.enable_api_control() is True
         asyncio.run(request_control_async(drone))
+        assert drone.is_api_control_enabled() is True
 
     except NNGException as err:
         raise Exception(str(err))
@@ -2021,7 +2235,12 @@ def test_set_mission_mode_async(client):
         world = World(client, "scene_test_drone.jsonc", 1)
         drone = Drone(client, world, "Drone1")
 
+        assert drone.enable_api_control() is True
         asyncio.run(set_mission_mode_async(drone))
+        kin = drone.get_ground_truth_kinematics()
+        q = kin["pose"]["orientation"]
+        qn = math.sqrt(q["w"] ** 2 + q["x"] ** 2 + q["y"] ** 2 + q["z"] ** 2)
+        assert qn == pytest.approx(1.0, abs=1e-2)
 
     except NNGException as err:
         raise Exception(str(err))
@@ -2037,7 +2256,12 @@ def test_set_vtol_mode_async(client):
         world = World(client, "scene_test_drone.jsonc", 1)
         drone = Drone(client, world, "Drone1")
 
+        assert drone.enable_api_control() is True
         asyncio.run(set_vtol_mode_async(drone))
+        kin = drone.get_ground_truth_kinematics()
+        q = kin["pose"]["orientation"]
+        qn = math.sqrt(q["w"] ** 2 + q["x"] ** 2 + q["y"] ** 2 + q["z"] ** 2)
+        assert qn == pytest.approx(1.0, abs=1e-2)
 
     except NNGException as err:
         raise Exception(str(err))

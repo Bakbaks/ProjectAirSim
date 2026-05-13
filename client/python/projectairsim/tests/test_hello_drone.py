@@ -6,20 +6,60 @@ Pytest end-end test script for hello_drone.py functionality
 """
 
 import asyncio
+import os
 import pytest
 import time
 import numpy as np
 
 from projectairsim import Drone, ProjectAirSimClient, World
-from projectairsim.utils import projectairsim_log
+from projectairsim.types import ImageType
+from projectairsim.utils import projectairsim_log, unpack_image
+
+from image_validation_utils import assert_rgb_scene_image_valid
+
+# ---------------------------------------------------------------------------
+# Optional reference image (PNG/JPG) for similarity regression on DownCamera RGB.
+# Leave empty to skip reference correlation; set a path (or env override below)
+# after capturing a baseline from this test in your Blocks environment.
+# ---------------------------------------------------------------------------
+HELLO_DRONE_REFERENCE_IMAGE_PATH: str = ""
+HELLO_DRONE_IMAGE_SIMILARITY_MIN: float = 0.85
+
+# Env overrides (optional): PROJECTAIRSIM_TEST_HELLO_DRONE_REF_IMAGE,
+# PROJECTAIRSIM_TEST_HELLO_DRONE_SIM_MIN
+HELLO_DRONE_REF_IMAGE = (
+    os.environ.get("PROJECTAIRSIM_TEST_HELLO_DRONE_REF_IMAGE", "").strip()
+    or HELLO_DRONE_REFERENCE_IMAGE_PATH.strip()
+)
+HELLO_DRONE_SIM_MIN = float(
+    os.environ.get(
+        "PROJECTAIRSIM_TEST_HELLO_DRONE_SIM_MIN", str(HELLO_DRONE_IMAGE_SIMILARITY_MIN)
+    )
+)
 
 
-def check_image(img_msg):
-    img_nparr = np.frombuffer(img_msg["data"], dtype="uint8")
-    if img_nparr.size == 0:
-        return
-    if np.sum(img_nparr) == 0:
-        return
+def _assert_rgb_message(img_msg, context: str) -> None:
+    assert_rgb_scene_image_valid(
+        img_msg,
+        reference_image_path="",
+        min_similarity_to_reference=HELLO_DRONE_SIM_MIN,
+        min_gray_std=2.0,
+    )
+
+
+def _assert_depth_message(img_msg, context: str) -> None:
+    assert img_msg is not None and "data" in img_msg
+    arr = unpack_image(img_msg)
+    assert arr.size > 0, f"{context}: empty depth buffer"
+    assert float(np.std(arr)) > 0.05, f"{context}: flat depth"
+
+
+def check_image_rgb(img_msg):
+    _assert_rgb_message(img_msg, "rgb_stream")
+
+
+def check_image_depth(img_msg):
+    _assert_depth_message(img_msg, "depth_stream")
 
 
 def check_imu(imu_msg):
@@ -74,6 +114,7 @@ class TestClientBase:
         print("start")
         drone = multirotor.drone
         client = multirotor.client
+        world = multirotor.world
 
         client.subscribe(
             drone.robot_info["actual_pose"], multirotor.robot_actual_pose_callback
@@ -88,16 +129,26 @@ class TestClientBase:
 
         client.subscribe(
             drone.sensors["DownCamera"]["scene_camera"],
-            lambda _, rgb: check_image(rgb),
+            lambda _, rgb: check_image_rgb(rgb),
         )
         client.subscribe(
             drone.sensors["DownCamera"]["depth_camera"],
-            lambda _, depth: check_image(depth),
+            lambda _, depth: check_image_depth(depth),
         )
         client.subscribe(
             drone.sensors["IMU1"]["imu_kinematics"],
             lambda _, imu: check_imu(imu),
         )
+
+        world.pause()
+        snap = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
+        assert_rgb_scene_image_valid(
+            snap,
+            reference_image_path=HELLO_DRONE_REF_IMAGE,
+            min_similarity_to_reference=HELLO_DRONE_SIM_MIN,
+            min_gray_std=2.0,
+        )
+        world.resume()
 
         drone.enable_api_control()
         drone.arm()
