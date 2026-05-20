@@ -76,4 +76,5 @@ def assert_rgb_scene_image_valid(
             f"scene image similarity {sim:.4f} below minimum "
             f"{min_similarity_to_reference:.4f} vs reference {path}"
         )
+        print("similarity to reference:", sim)
     return sim, bgr
