@@ -1,3 +1,7 @@
+# Local run (self-hosted): from repo root export UE_ROOT and set DISPLAY 
+# (for example `export UE_ROOT=/path/to/UnrealEngine; export DISPLAY=:0`), 
+# then execute the same sequence used below: 
+# `git submodule sync; git submodule update --init --recursive; ./setup_linux_dev_tools.sh; rm -rf build; ./build.sh simlibs_release; "$UE_ROOT/Engine/Build/BatchFiles/Linux/Build.sh" BlocksEditor Linux Development "$(pwd)/unreal/Blocks/Blocks.uproject" -waitmutex; python3 -m venv airsimenv; source airsimenv/bin/activate; python -m pip install --upgrade pip; python -m pip install "setuptools<81" wheel; python -m pip install -e "client/python/projectairsim[datacollection]"; python -m pip install pytest pytest-cov pytest-asyncio; launch Unreal headless on DISPLAY=:0; wait for ports 8989/8990; cd client/python/projectairsim/tests; python -m pytest -v --junitxml=pytest-results.xml`.
 name: ProjectAirSim CI (Self-Hosted)
 
 on:
