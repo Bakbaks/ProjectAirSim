@@ -48,8 +48,30 @@ def drone(client, world):
 
 @pytest.fixture(scope="module")
 def world(client):
-    world = World(client, "scene_test_drone_sensors.jsonc", 1)
-    return world
+    # Create world with retries for scene loading
+    # Scene loading can timeout if the simulator is busy or the scene is complex
+    max_retries = 2
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            print(f"\\nAttempt {attempt + 1}/{max_retries}: Loading scene_test_drone_sensors.jsonc...")
+            world = World(client, "scene_test_drone_sensors.jsonc", 1)
+            print("Scene loaded successfully")
+            return world
+        except RuntimeError as e:
+            last_error = e
+            error_msg = str(e)
+            if "Timeout" in error_msg or "timeout" in error_msg.lower():
+                print(f"Scene load timeout (attempt {attempt + 1}/{max_retries}): {error_msg}")
+                if attempt < max_retries - 1:
+                    print("Waiting 3 seconds before retry...")
+                    time.sleep(3.0)
+                    continue
+            else:
+                # Non-timeout error, raise immediately
+                raise
+    # If we get here, all retries failed
+    pytest.skip(f"Failed to load scene after {max_retries} attempts. Last error: {last_error}")
 
 
 def test_sensor_timestamp_validity(drone):

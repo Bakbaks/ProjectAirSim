@@ -81,7 +81,7 @@ def test_time_api(data_generator: DataGenerator, world: World):
             success, world = set_time(world, pose.time)
             assert success is True
             tod = world.get_time_of_day()
-            assert tod
+            assert tod is not None, "get_time_of_day() returned None"
             sim_dt = None
             for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f"):
                 try:
@@ -89,7 +89,7 @@ def test_time_api(data_generator: DataGenerator, world: World):
                     break
                 except ValueError:
                     continue
-            assert sim_dt is not None
+            assert sim_dt is not None, f"Failed to parse time of day: {tod}"
             assert sim_dt.date() == pose.time.date()
             assert abs((sim_dt - pose.time).total_seconds()) < 120
 

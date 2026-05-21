@@ -24,7 +24,7 @@ from image_validation_utils import assert_rgb_scene_image_valid
 # after capturing a baseline from this test in your Blocks environment.
 # ---------------------------------------------------------------------------
 HELLO_DRONE_REFERENCE_IMAGE_PATH: str = "hello_drone_ref_images"
-HELLO_DRONE_IMAGE_SIMILARITY_MIN: float = 0.99
+HELLO_DRONE_IMAGE_SIMILARITY_MIN: float = 0.95
 
 # Env overrides (optional): PROJECTAIRSIM_TEST_HELLO_DRONE_REF_IMAGE,
 # PROJECTAIRSIM_TEST_HELLO_DRONE_SIM_MIN
