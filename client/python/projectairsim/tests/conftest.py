@@ -12,6 +12,83 @@ import time
 import gc
 
 
+def _socket_is_closed(socket_obj) -> bool:
+    if socket_obj is None:
+        return True
+    return bool(getattr(socket_obj, "closed", False))
+
+
+def _client_needs_reconnect(client) -> bool:
+    if client is None:
+        return False
+    if not getattr(client, "state", False):
+        return True
+    if _socket_is_closed(getattr(client, "socket_topics", None)):
+        return True
+    if _socket_is_closed(getattr(client, "socket_services", None)):
+        return True
+    return False
+
+
+def _safe_disconnect(client) -> None:
+    if client is None:
+        return
+    try:
+        client.disconnect()
+    except Exception:
+        pass
+
+
+def _reload_world_if_possible(world) -> None:
+    if world is None:
+        return
+    sim_config = getattr(world, "sim_config", None)
+    if sim_config is None:
+        return
+    world.load_scene(sim_config, delay_after_load_sec=1.0)
+
+
+def _extract_client_and_world(request):
+    client = None
+    world = None
+
+    for fixture_name in ("client", "world", "drone", "multirotor", "robo_fixture", "robo"):
+        if fixture_name not in request.fixturenames:
+            continue
+
+        try:
+            fixture_obj = request.getfixturevalue(fixture_name)
+        except Exception:
+            continue
+
+        if fixture_name == "client":
+            client = fixture_obj
+        elif fixture_name == "world":
+            world = fixture_obj
+            client = getattr(fixture_obj, "client", client)
+        else:
+            client = getattr(fixture_obj, "client", client)
+            world = getattr(fixture_obj, "world", world)
+
+    return client, world
+
+
+@pytest.fixture(scope="function", autouse=True)
+def ensure_client_connected(request):
+    client, world = _extract_client_and_world(request)
+
+    if _client_needs_reconnect(client):
+        _safe_disconnect(client)
+        client.connect()
+        try:
+            client.get_topic_info()
+        except Exception:
+            pass
+        _reload_world_if_possible(world)
+
+    yield
+
+
 @pytest.fixture(scope="function", autouse=True)
 def test_isolation(request):
     """

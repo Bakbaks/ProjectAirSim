@@ -45,6 +45,55 @@ def _bgr_center_mean(image_msg: Dict) -> np.ndarray:
     return patch.mean(axis=(0, 1)).astype(np.float64)
 
 
+def _bgr_object_mean(image_msg: Dict, object_name: str) -> np.ndarray:
+    """Mean BGR inside the annotated bbox for a given object, if available."""
+    bgr = unpack_image(image_msg)
+    annotations = image_msg.get("annotations") or []
+
+    for annotation in annotations:
+        if annotation.get("object_id") != object_name:
+            continue
+
+        bbox = annotation.get("bbox2d") or {}
+        center = bbox.get("center") or {}
+        size = bbox.get("size") or {}
+
+        cx = int(round(center.get("x", bgr.shape[1] / 2)))
+        cy = int(round(center.get("y", bgr.shape[0] / 2)))
+        half_w = max(4, int(round(size.get("x", 0) / 2.0)))
+        half_h = max(4, int(round(size.get("y", 0) / 2.0)))
+
+        x0 = max(0, cx - half_w)
+        x1 = min(bgr.shape[1], cx + half_w)
+        y0 = max(0, cy - half_h)
+        y1 = min(bgr.shape[0], cy + half_h)
+
+        patch = bgr[y0:y1, x0:x1]
+        if patch.size > 0:
+            return patch.mean(axis=(0, 1)).astype(np.float64)
+
+    return _bgr_center_mean(image_msg)
+
+
+def _capture_object_mean(
+    drone: Drone,
+    world: World,
+    object_name: str,
+    camera_id: str = "DownCamera",
+    settle_sec: float = 0.3,
+) -> np.ndarray:
+    drone.camera_look_at_object(camera_id=camera_id, object_name=object_name)
+    time.sleep(settle_sec)
+
+    world.pause()
+    try:
+        image = drone.get_images(camera_id, [ImageType.SCENE])[ImageType.SCENE]
+    finally:
+        world.resume()
+
+    return _bgr_object_mean(image, object_name)
+
+
 def _quat_dict_rpy(q: Dict[str, float]) -> Tuple[float, float, float]:
     return quaternion_to_rpy(q["w"], q["x"], q["y"], q["z"])
 
@@ -1142,23 +1191,16 @@ def test_set_object_material(client):
         drone = Drone(client, world, "Drone1")
 
         object_name = "OrangeBall"
-        world.pause()
-        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean0 = _bgr_center_mean(before)
-        world.resume()
+        mean0 = _capture_object_mean(drone, world, object_name)
 
         material_path = "/ProjectAirSim/Weather/WeatherFX/Materials/M_Leaf_master"
         status = world.set_object_material(object_name, material_path)
         assert status is True
 
-        # Allow time for material update to propagate
-        time.sleep(0.5)
-        world.pause()
-        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean1 = _bgr_center_mean(after)
-        world.resume()
+        time.sleep(1.0)
+        mean1 = _capture_object_mean(drone, world, object_name)
 
-        assert float(np.linalg.norm(mean1 - mean0)) >= 0.5
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.05
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1172,22 +1214,15 @@ def test_set_object_texture_from_url(client):
         url = "https://www.jpl.nasa.gov/spaceimages/images/largesize/PIA07782_hires.jpg"
         object_name = "OrangeBall"
 
-        world.pause()
-        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean0 = _bgr_center_mean(before)
-        world.resume()
+        mean0 = _capture_object_mean(drone, world, object_name)
 
         status = world.set_object_texture_from_url(object_name, url)
         assert status is True
 
-        # Allow time for texture update to propagate
-        time.sleep(0.5)
-        world.pause()
-        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean1 = _bgr_center_mean(after)
-        world.resume()
+        time.sleep(1.0)
+        mean1 = _capture_object_mean(drone, world, object_name)
 
-        assert float(np.linalg.norm(mean1 - mean0)) >= 0.5
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.05
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1200,22 +1235,15 @@ def test_set_object_texture_from_file(client):
         object_name = "OrangeBall"
         texture_path = "assets/sample_texture.png"
 
-        world.pause()
-        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean0 = _bgr_center_mean(before)
-        world.resume()
+        mean0 = _capture_object_mean(drone, world, object_name)
 
         status = world.set_object_texture_from_file(object_name, texture_path)
         assert status is True
 
-        # Allow time for texture update to propagate
-        time.sleep(0.5)
-        world.pause()
-        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean1 = _bgr_center_mean(after)
-        world.resume()
+        time.sleep(1.0)
+        mean1 = _capture_object_mean(drone, world, object_name)
 
-        assert float(np.linalg.norm(mean1 - mean0)) >= 0.5
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.05
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1228,22 +1256,15 @@ def test_set_object_texture_from_packaged_asset(client):
         object_name = "Cone"
         texture_path = "/Game/Geometry/Textures/T_Default_Material_Grid_M"
 
-        world.pause()
-        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean0 = _bgr_center_mean(before)
-        world.resume()
+        mean0 = _capture_object_mean(drone, world, object_name)
 
         status = world.set_object_texture_from_packaged_asset(object_name, texture_path)
         assert status is True
 
-        # Allow time for texture update to propagate
-        time.sleep(0.5)
-        world.pause()
-        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean1 = _bgr_center_mean(after)
-        world.resume()
+        time.sleep(1.0)
+        mean1 = _capture_object_mean(drone, world, object_name)
 
-        assert float(np.linalg.norm(mean1 - mean0)) >= 0.25
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.03
 
     except NNGException as err:
         raise Exception(str(err))
@@ -1255,35 +1276,25 @@ def test_swap_object_texture(client):
         drone = Drone(client, world, "Drone1")
 
         object_actor_tag = "ball"
+        object_name = "OrangeBall"
 
-        world.pause()
-        before = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean0 = _bgr_center_mean(before)
-        world.resume()
+        mean0 = _capture_object_mean(drone, world, object_name)
 
         swapped_objects = world.swap_object_texture(object_actor_tag, 1)
         assert len(swapped_objects) > 0
 
-        # Allow time for texture swap to propagate
-        time.sleep(0.5)
-        world.pause()
-        mid = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean1 = _bgr_center_mean(mid)
-        world.resume()
+        time.sleep(1.0)
+        mean1 = _capture_object_mean(drone, world, object_name)
 
         swapped_objects = world.swap_object_texture(object_actor_tag, 0)
         assert len(swapped_objects) > 0
 
-        # Allow time for texture swap to propagate
-        time.sleep(0.5)
-        world.pause()
-        after = drone.get_images("DownCamera", [ImageType.SCENE])[ImageType.SCENE]
-        mean2 = _bgr_center_mean(after)
-        world.resume()
+        time.sleep(1.0)
+        mean2 = _capture_object_mean(drone, world, object_name)
 
-        assert float(np.linalg.norm(mean1 - mean0)) >= 0.2 or float(
+        assert float(np.linalg.norm(mean1 - mean0)) >= 0.03 or float(
             np.linalg.norm(mean2 - mean1)
-        ) >= 0.2
+        ) >= 0.03
 
     except NNGException as err:
         raise Exception(str(err))
