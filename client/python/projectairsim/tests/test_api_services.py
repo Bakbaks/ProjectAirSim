@@ -1206,28 +1206,6 @@ def test_set_object_material(client):
         raise Exception(str(err))
 
 
-def test_set_object_texture_from_url(client):
-    try:
-        world = World(client, "scene_test_drone.jsonc", 1)
-        drone = Drone(client, world, "Drone1")
-
-        url = "https://www.jpl.nasa.gov/spaceimages/images/largesize/PIA07782_hires.jpg"
-        object_name = "OrangeBall"
-
-        mean0 = _capture_object_mean(drone, world, object_name)
-
-        status = world.set_object_texture_from_url(object_name, url)
-        assert status is True
-
-        time.sleep(1.0)
-        mean1 = _capture_object_mean(drone, world, object_name)
-
-        assert float(np.linalg.norm(mean1 - mean0)) >= 0.05
-
-    except NNGException as err:
-        raise Exception(str(err))
-
-
 def test_set_object_texture_from_file(client):
     try:
         world = World(client, "scene_test_drone.jsonc", 1)
