@@ -77,4 +77,4 @@ endif()
 
 # Include CMake's GoogleTest module to use gtest_discover_tests() helper
 include(GoogleTest)
-gtest_discover_tests(${TARGET_NAME})
+gtest_discover_tests(${TARGET_NAME} DISCOVERY_TIMEOUT 30)
